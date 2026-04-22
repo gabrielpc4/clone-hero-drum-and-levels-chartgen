@@ -46,7 +46,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from parse_chart import parse_part
 from parse_drums import DIFF_BASE_DRUMS, LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN
 
-# (pitch GM) -> (lane RB, is_cymbal)
+# Mapa base GM → (lane RB, is_cymbal) para pitches NÃO-tom. Os toms (GM 41,43,
+# 45,47,48,50) são mapeados dinamicamente por _tom_pitch_to_lane() com base nos
+# pitches efetivamente usados na track — isso evita colapsar dois toms distintos
+# (ex: GM 48 Hi-Mid + GM 50 High) em uma mesma lane.
 GM_TO_RB: Dict[int, Tuple[int, bool]] = {
     35: (LANE_KICK,   False),
     36: (LANE_KICK,   False),
@@ -54,16 +57,10 @@ GM_TO_RB: Dict[int, Tuple[int, bool]] = {
     38: (LANE_SNARE,  False),
     39: (LANE_SNARE,  False),
     40: (LANE_SNARE,  False),
-    41: (LANE_GREEN,  False),   # low floor tom
     42: (LANE_YELLOW, True),    # closed hi-hat
-    43: (LANE_GREEN,  False),   # high floor tom
-    44: (LANE_YELLOW, True),    # pedal hi-hat — poderia dropar; mantemos como hat
-    45: (LANE_BLUE,   False),   # low tom
-    46: (LANE_BLUE,   True),    # open hi-hat → blue cymbal em RB
-    47: (LANE_BLUE,   False),   # low-mid tom
-    48: (LANE_YELLOW, False),   # hi-mid tom
+    44: (LANE_YELLOW, True),    # pedal hi-hat
+    46: (LANE_BLUE,   True),    # open hi-hat → blue cymbal em RB (override dinâmico)
     49: (LANE_GREEN,  True),    # crash 1
-    50: (LANE_YELLOW, False),   # high tom
     51: (LANE_BLUE,   True),    # ride 1
     52: (LANE_GREEN,  True),    # china
     53: (LANE_BLUE,   True),    # ride bell
@@ -71,6 +68,41 @@ GM_TO_RB: Dict[int, Tuple[int, bool]] = {
     57: (LANE_GREEN,  True),    # crash 2
     59: (LANE_BLUE,   True),    # ride 2
 }
+
+TOM_PITCHES = (41, 43, 45, 47, 48, 50)  # todos os toms GM, ordenados crescente
+
+
+def build_tom_pitch_map(drum_track) -> Dict[int, int]:
+    """Retorna {pitch_gm → lane_rb} com base nos toms usados pela track.
+       Regra: ordenar pitches usados DECRESCENTE (mais agudo primeiro) e
+       distribuir por 3 lanes (Y=mais agudo, B=meio, G=floor) via particionamento.
+    """
+    used = set()
+    for msg in drum_track:
+        if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9 \
+           and msg.note in TOM_PITCHES:
+            used.add(msg.note)
+    if not used:
+        return {}
+    sorted_desc = sorted(used, reverse=True)  # mais agudo primeiro
+    n = len(sorted_desc)
+    out = {}
+    if n == 1:
+        out[sorted_desc[0]] = LANE_YELLOW
+    elif n == 2:
+        out[sorted_desc[0]] = LANE_YELLOW
+        out[sorted_desc[1]] = LANE_BLUE
+    else:
+        # Divide em 3 tercos
+        third = n / 3
+        for i, p in enumerate(sorted_desc):
+            if i < round(third):
+                out[p] = LANE_YELLOW
+            elif i < round(2 * third):
+                out[p] = LANE_BLUE
+            else:
+                out[p] = LANE_GREEN
+    return out
 
 
 def _tempo_map(track0, tpb: int) -> List[Tuple[int, float]]:
@@ -457,6 +489,18 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     #   - Snare: segunda nota vira Y-tom (preserva sensação de baqueta dupla
     #     como "vermelho+amarelo").
     #   - Outras lanes: segunda nota descartada (simples dedup).
+    # Mapeamento dinâmico de toms (48, 50, 45... → Y/B/G) baseado nos pitches
+    # efetivamente usados na track de bateria do src.
+    tom_lane_map = build_tom_pitch_map(drum_track)
+
+    def _resolve_lane(pitch: int) -> Tuple[int, bool]:
+        """Retorna (lane, is_cymbal) considerando open-hat mode e tom map."""
+        if pitch in tom_lane_map:
+            return (tom_lane_map[pitch], False)
+        if pitch == 46:
+            return (LANE_YELLOW if open_mode_yellow else LANE_BLUE, True)
+        return GM_TO_RB.get(pitch, (None, None))
+
     dedup_gap_ticks = int(round(src_tpb * dedup_beats))
     last_tick_by_lane: Dict[Tuple[int, bool], int] = {}
     # Chave usa (tick, pitch) — não só tick — porque várias lanes podem compartilhar
@@ -467,11 +511,8 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     for msg in drum_track:
         abs_src += msg.time
         if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-            rb = GM_TO_RB.get(msg.note)
-            if rb is None: continue
-            lane_raw, is_cym_raw = rb
-            if msg.note == 46:
-                lane_raw, is_cym_raw = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
+            lane_raw, is_cym_raw = _resolve_lane(msg.note)
+            if lane_raw is None: continue
             key = (lane_raw, is_cym_raw)
             last = last_tick_by_lane.get(key)
             if last is not None and abs_src - last <= dedup_gap_ticks:
@@ -498,11 +539,8 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                 src_sec = tick_to_seconds(abs_src, src_tm)
                 target_sec = anchor_ref_sec + time_scale * (src_sec - anchor_src_sec)
                 if target_sec < 0: continue
-                rb = GM_TO_RB.get(msg.note)
-                if rb is None: continue
-                lane, is_cym = rb
-                if msg.note == 46:
-                    lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
+                lane, is_cym = _resolve_lane(msg.note)
+                if lane is None: continue
                 if (abs_src, msg.note) in flam_snare_second:  # flam em snare: 2ª nota vira Y-tom
                     lane, is_cym = LANE_YELLOW, False
                 target_tick = _sec_to_tick(target_sec, ref_tempo_map)
@@ -516,11 +554,8 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                 if src_beat < drop_before_src_beat: continue
                 tgt_beat = src_beat + beat_offset
                 if tgt_beat < 0: continue
-                rb = GM_TO_RB.get(msg.note)
-                if rb is None: continue
-                lane, is_cym = rb
-                if msg.note == 46:
-                    lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
+                lane, is_cym = _resolve_lane(msg.note)
+                if lane is None: continue
                 if (abs_src, msg.note) in flam_snare_second:
                     lane, is_cym = LANE_YELLOW, False
                 target_tick = int(round(tgt_beat * target_tpb))
