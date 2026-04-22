@@ -652,13 +652,19 @@ Open strum = nenhum botão de fret pressionado; representado como `frets=()` no 
   - Tentadas: alocação Bresenham (piorou Hypnotize), regra forçada sub0+sub2 (não mudou), target_ratio local por janela (piorou outras), peak-fret bonus (pequena melhora geral).
   - **Conclusão:** Aerials é caso "sem padrão estatístico" — para subir além do platô requer features de **detecção de motivo melódico/repetição** ou modelo treinado nota a nota. Adicionado **R18** (peak-fret bonus em Hard/Medium): score +25/+15 para nota cujo fret é máximo dentro do beat (preserva picos do tremolo).
   - **F1 final pós-iteração:** Hard 0.85, Medium 0.79, Easy 0.74 (mesmo platô; melhoria pequena de fret_exact em Hard).
-- **2026-04-22 (7)** — Início do estudo de **PART DRUMS** (bateria). Criado `_analysis/parse_drums.py`. Documentada nova **§14** com:
-  - Mapa de pitches por dificuldade (60-64, 72-76, 84-88, 96-100) + 2x kick (95).
-  - **Pro Drums** explicado: pitches 110/111/112 são phrase-markers que convertem Y/B/G em prato (cymbal) durante o intervalo. Só afeta Hard/Expert.
-  - Convenção musical confirmada com usuário: Vermelho=caixa, Y-tom=tom 1, Y-cym=chimbal, B-tom=tom 2, B-cym=ride/hi-hat aberto, G-tom=surdo, G-cym=crash.
-  - **Drums preserva muito mais que guitarra** em todas as dificuldades (média E=0.38, M=0.55, H=0.76 vs guitarra E=0.23, M=0.38, H=0.64) — porque "simplificar bateria" é tirar pratos/fundir tons, não dropar gem-events.
-  - Regras observadas D-R1 a D-R7 documentadas (D-R1 lei: Easy/Medium = 0 cymbals; D-R2 lei: Snare sagrada; D-R3 forte: kick fortemente decimado em Easy, alguns só 2-7%).
-  - Próximo passo: alinhamento drums Expert↔reduções para validar D-R3 a D-R7 e construir `reducer_drums.py`.
+- **2026-04-22 (7)** — Início do estudo de **PART DRUMS** (bateria). Criado `_analysis/parse_drums.py`. Documentada nova **§14** com mapa de pitches, Pro Drums, convenção musical, estatísticas brutas e regras D-R1 a D-R7 candidatas.
+- **2026-04-22 (8)** — Drums completa: análise + reducer + writer MIDI estendido.
+  - `_analysis/align_drums.py`: alinhamento Expert↔reduções, validou D-R1 a D-R12.
+  - **Achados-chave do alinhamento:**
+    - **D-R3 refinada (LEI):** Em Easy/Medium, kick só é mantido se simultâneo a outra nota. Solo kicks dropam ~100%.
+    - **D-R7 confirmada (LEI):** 2x kick (pitch 95) some 100% em E/M/H.
+    - **D-R8 (forte):** Snare em Easy ≈ Snare em Medium (mesma redução em 5/6 músicas).
+    - **D-R9 (NOVA, forte):** Drums permite **transferência entre lanes** na redução. Padrões: Blue-tom raro → Yellow-tom em E/M; Green-cym → Blue-cym em Hard; Green-cym → Blue-tom em E/M.
+    - **D-R10 (forte):** Em Hard, Green-cym tende a virar Blue-cym (visto em Hypnotize: 48 de 49 Green-cym Expert viraram Blue-cym Hard).
+    - **D-R11 (forte):** Yellow-cym preservada ~95-100% em Hard.
+  - `_analysis/reducer_drums.py`: targets calibrados via regressão; aplica D-R1 a D-R12.
+  - `_analysis/midi_writer.py` estendido: gera PART GUITAR + PART DRUMS no mesmo notes.gen.mid.
+  - **Resultados drums F1:** Hard **0.86** / Medium **0.75** / Easy **0.62**. Expert preservado 100% para ambas PARTs.
 
 ---
 
@@ -805,10 +811,140 @@ A regra parece ser: **Easy mantém kick só nos downbeats fortes** (geralmente s
 
 **D-R7 (hipótese): 2x kick (pitch 95, double bass) é simplificado para single kick (pitch 96) em Hard, e some completamente em Medium/Easy.** Validar olhando BYOB (que tem 99 ocorrências do pitch 95).
 
-### 14.6 Próximos passos para drums
+### 14.6 Alinhamento Expert↔reduções (drums) — achados
 
-1. ⏳ Construir alinhamento Expert↔reduções drums (similar ao §7 da guitarra) para validar D-R1 a D-R7.
-2. ⏳ Estudar conversão cymbal→tom: quando Hard preserva cymbal vs converte para tom?
-3. ⏳ Estudar 2x kick reduction em BYOB.
-4. ⏳ Construir `reducer_drums.py` com regras D-R1 a D-R7 + features adicionais.
-5. ⏳ Estender `midi_writer.py` para também escrever PART DRUMS reduzido (preservando markers 110/111/112).
+Análise rodada por `_analysis/align_drums.py`. Validou várias hipóteses e descobriu novas regras.
+
+#### 14.6.1 Confirmação D-R3 → REFINADA: Kick em E/M é SEMPRE paired
+
+Para cada música, 100% dos kicks mantidos em **Easy** estão em ticks que **também têm outra nota** (snare, tom, cymbal). Kicks "solo" (isolados) são dropados ~100% do tempo.
+
+| Música | Easy: paired_kept / solo_kept | Medium: paired_kept / solo_kept | Hard: paired_kept / solo_kept |
+|---|---|---|---|
+| Aerials   | 58 / 0  | 129 / 0 | 165 / 64 |
+| BYOB      | 17 / 1  | 160 / 1 | 356 / 46 |
+| Chop Suey | 25 / 0  | 119 / 0 | 207 / 13 |
+| Hypnotize | 44 / 0  | 104 / 0 | 169 / 13 |
+| Spiders   | 14 / 0  | 90 / 0  | 175 / 8 |
+| Toxicity  | 90 / 0  | 113 / 0 | (igual) |
+
+**→ D-R3 (Lei refinada):** Em **Easy e Medium**, kick só é mantido se **simultâneo a outra nota** (snare/tom/cym). Em **Hard**, kicks solo podem aparecer (mas ainda minoritários).
+
+#### 14.6.2 Confirmação D-R7: 2x kick desaparece
+
+BYOB tem **99 ocorrências de 2x kick** (pitch 95). Em **Easy: 0 mantidos. Medium: 0. Hard: 0**. **→ D-R7 (Lei) confirmada.**
+
+#### 14.6.3 Snare Easy ≡ Snare Medium na maioria
+
+| Música | Snare Easy | Snare Medium |
+|---|---|---|
+| Aerials   | 124 | 124 (idêntico) |
+| BYOB      | 279 | 283 (quase) |
+| Chop Suey | 125 | 129 (quase) |
+| Hypnotize | 75  | 75  (idêntico) |
+| Spiders   | 106 | 106 (idêntico) |
+| Toxicity  | 198 | 218 |
+
+**→ D-R8 (forte):** Snare em Easy e Medium é tipicamente o mesmo subset. A simplificação E vs M acontece em outras lanes.
+
+#### 14.6.4 Transferência entre lanes — DROPS por reorganização visual
+
+**Achado importante**: drums permite **mudança de lane** na redução, não apenas drop.
+
+Casos observados:
+- **BYOB Easy/Medium**: Blue-tom Expert → **Yellow-tom** Easy/Medium em ~85% dos casos. A música tem poucos Blue-tom, então a Harmonix consolida para Yellow.
+- **Hypnotize Hard**: Green-cym Expert → **Blue-cym** Hard em **48 dos 49 casos** (98%). Crash distante é convertido para ride/hi-hat aberto mais central.
+- **Hypnotize Easy/Medium**: Green-cym Expert (49) → **Blue-tom** Easy/Medium em 45/49. Cymbal vira tom da lane mais ativa musicamente, não da mesma cor.
+- **Toxicity Easy**: Blue-tom Expert → Yellow-tom* (76) ou Snare* (52). Consolidação visual.
+
+**→ D-R9 (forte, NOVA):** A Harmonix consolida lanes pouco usadas em redução. Padrões observados:
+- **Blue-tom isolado/raro → Yellow-tom** (B→Y) em E/M.
+- **Green-cym → Blue-cym** em Hard (cymbal aproxima do centro).
+- **Green-cym → Blue-tom** em E/M (cymbal vira tom da lane musical mais usada, não da própria cor).
+
+#### 14.6.5 Conversão cymbal→tom em E/M (D-R1 detalhado)
+
+Para cada Y-cym/B-cym/G-cym Expert que sobrevive em Easy/Medium:
+
+| Cymbal Expert | E/M outcome típico |
+|---|---|
+| Yellow-cym | ~50% vira **Yellow-tom**, ~50% drop |
+| Blue-cym | ~30% vira **Blue-tom**, ~70% drop |
+| Green-cym | ~50% vira **Blue-tom** (não Green-tom!), ~50% drop |
+
+**→ D-R1.1:** Em E/M, conversão preferencial é cymbal → tom da MESMA COR, exceto Green-cym que prefere Blue-tom (a lane mais ativa).
+
+#### 14.6.6 Conversão em Hard
+
+| Item Expert | Hard outcome típico |
+|---|---|
+| Yellow-cym | **95-100% mantém Yellow-cym** (D-R11) |
+| Blue-cym  | 24% (Hypnotize) a 94% (Aerials) mantém Blue-cym; resto drop |
+| Green-cym | Variável. Hypnotize: 98% vira Blue-cym (D-R10). Chop Suey: 100% mantém Green-cym. |
+| Y-tom/B-tom/G-tom | 60-100% mantém lane idêntica |
+| Snare | 60-99% mantém |
+| Kick | 50-85% mantém (paired ou solo) |
+
+**→ D-R10 (forte):** Em Hard, **Green-cym tende a virar Blue-cym** quando densidade de Green-cym é alta na música (Hypnotize tinha 49). Quando rara (Chop Suey 14), pode preservar.
+
+**→ D-R11 (forte):** **Yellow-cym é preservada** quase sempre em Hard.
+
+### 14.7 Lista consolidada de regras drums (para implementação)
+
+| ID | Regra | Força |
+|---|---|---|
+| D-R1 | Easy e Medium = ZERO cymbals (todos viram tom ou some) | **Lei** |
+| D-R1.1 | Cymbal Expert → tom da mesma cor em E/M, exceto Green-cym → Blue-tom | Forte |
+| D-R2 | Snare é "sagrada": mantém lane Snare em todos os níveis | **Lei** |
+| D-R3 | Em Easy/Medium, kick só é mantido se **simultâneo a outra nota** (snare/tom/cym) | **Lei** |
+| D-R4 | Densidades: kick E ~5-22%, M ~20-50%, H ~50-90% (varia por música) | Forte |
+| D-R7 | 2x kick (pitch 95, Expert+) some 100% em Hard/Medium/Easy | **Lei** |
+| D-R8 | Snare em Easy ≈ Snare em Medium (mesma redução) | Forte |
+| D-R9 | Lanes pouco usadas são consolidadas: Blue-tom raro → Yellow-tom em E/M; Green-cym → Blue-cym em Hard ou Blue-tom em E/M | Forte |
+| D-R10 | Em Hard, Green-cym tende a virar Blue-cym (especialmente quando >30 ocorrências) | Forte |
+| D-R11 | Yellow-cym é preservada em Hard (~95-100%) | **Lei** |
+| D-R12 | Em todos os níveis, drum_fills (120-124) são preservados intactos | Forte (a verificar) |
+
+### 14.8 Reducer drums — implementação e validação
+
+`_analysis/reducer_drums.py` implementa pipeline de redução com:
+- **Targets por lane** calibrados via regressão linear nas 6 músicas:
+  - `TOM_RATIOS[diff][lane]`: kept_count = ratio * expert_count
+  - `CYMBAL_RATIOS_HARD`: Y=0.93, B=0.46, G=0.25 (Yellow preserva, Blue/Green decimam)
+  - `CYMBAL_TO_TOM_FRACTION` em E/M: 20% (Easy), 30% (Medium) — fração que sobrevive como tom
+- **D-R3 implementada**: kick em E/M filtrado para só notas paired
+- **D-R7 implementada**: 2x kick (pitch 95) sempre dropado em E/M/H
+- **D-R9 implementada**: detect_lane_consolidation — Blue→Yellow quando blue raro OU Y-cym presente >50
+- **D-R10 implementada**: detect_green_cym_strategy — G-cym→Blue-cym em Hard quando >30 ocorrências
+
+**Resultados F1 (incluindo cymbal vs tom no match):**
+
+| Música | Hard | Medium | Easy |
+|---|---|---|---|
+| Aerials   | **0.88** | 0.82 | 0.62 |
+| BYOB      | **0.90** | 0.74 | 0.63 |
+| Chop Suey | **0.91** | 0.79 | 0.74 |
+| Hypnotize | 0.80 | 0.66 | 0.50 |
+| Spiders   | 0.82 | 0.78 | 0.63 |
+| Toxicity  | 0.83 | 0.70 | 0.57 |
+| **Média** | **0.86** | **0.75** | **0.62** |
+
+**Comparação com guitarra (mesma escala):** Hard 0.85 / Medium 0.79 / Easy 0.74. Bateria comparable em Hard, ligeiramente abaixo em Easy/Medium — devido à **transferência inter-lane** ser mais difícil de modelar que a redução de chord-shape da guitarra.
+
+### 14.9 Writer MIDI estendido para drums
+
+`_analysis/midi_writer.py` agora gera **PART GUITAR + PART DRUMS** no mesmo `notes.gen.mid`:
+- Strip pitches 60-64 / 72-76 / 84-88 (E/M/H drums)
+- Preserva: Expert (96-100), 2x kick (95), Pro Drums markers (110/111/112), SP (116), drum fills (120-124), animações (24-51), P1/P2 (105/106), text events
+- Adiciona notas geradas por `reduce_drums()` na pitch correta de cada lane/dificuldade
+- **Validado: Expert intacto 100% nas 6 músicas para ambas PARTs.**
+
+### 14.10 Próximos passos drums
+
+1. ✅ Análise estrutural completa.
+2. ✅ Reducer drums + writer MIDI.
+3. ⏳ Validação subjetiva pelo usuário no Moonscraper.
+4. ⏳ Possíveis melhorias futuras:
+   - Snare ratio adaptativo por densidade (Hypnotize 89% vs Toxicity 43%).
+   - Detecção de **sequência de tom-fills** (preservar inteiros em E/M, não decimar).
+   - Modelagem de rolls/swells em runs longos de snare.

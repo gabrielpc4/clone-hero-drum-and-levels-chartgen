@@ -1,19 +1,12 @@
 """
-Writer MIDI: pega um notes.mid original (Harmonix), gera reduções E/M/H da PART GUITAR
-a partir do Expert e escreve um novo notes.mid no formato CH/RB.
+Writer MIDI: pega um notes.mid original (Harmonix), gera reduções E/M/H da
+PART GUITAR e PART DRUMS a partir do Expert e escreve novo notes.mid.
 
 Estratégia:
-  - copia todas as faixas EXCETO PART GUITAR
-  - reconstrói PART GUITAR com:
-      - notas Expert preservadas (pitches 96-100)
-      - novas notas Hard (pitches 84-88) geradas pelo reducer
-      - novas notas Medium (pitches 72-76)
-      - novas notas Easy (pitches 60-64)
-      - marcadores compartilhados (overdrive=116, solos=103/105/106 — preservar do original)
-      - animações de mão (40-59 — preservar do original)
-
-Comparação: se gerarmos `notes.gen.mid` no mesmo diretório de uma música existente,
-podemos diff vs o `notes.mid` original.
+  - copia todas as faixas EXCETO PART GUITAR e PART DRUMS
+  - PART GUITAR: substitui E/M/H gerados pelo reducer; preserva Expert + markers
+  - PART DRUMS: substitui E/M/H pelos drum charts gerados; preserva Expert,
+    markers cymbal (110/111/112), drum fills (120-124), 2x kick (95), animações
 """
 from __future__ import annotations
 import os, sys, copy
@@ -21,6 +14,8 @@ import mido
 sys.path.insert(0, os.path.dirname(__file__))
 from parse_chart import parse_part, FRET_NAMES, DIFF_BASE
 from reducer import reduce_chart
+from parse_drums import parse_drums, DIFF_BASE_DRUMS, LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN
+from reducer_drums import reduce_drums
 
 
 def _abs_to_delta(events_abs):
@@ -102,35 +97,101 @@ def _make_guitar_track_from_charts(orig_track, charts_by_diff, replace_diffs=("E
     return new_track
 
 
+def _make_drums_track_from_charts(orig_track, drum_charts_by_diff, replace_diffs=("Easy","Medium","Hard")):
+    """Reconstrói PART DRUMS:
+       - Strip pitches das dificuldades a serem substituídas (60-64 / 72-76 / 84-88)
+       - Mantém Expert (96-100), 2x kick (95), markers Pro (110/111/112), SP (116),
+         drum fills (120-124), animações (24-51), P1/P2 (105/106) e text events
+       - Adiciona notas geradas com pitches corretos por dificuldade.
+    """
+    pitches_to_strip = set()
+    for diff in replace_diffs:
+        base = DIFF_BASE_DRUMS[diff]
+        for p in range(base, base + 5):  # kick + snare + 3 pads
+            pitches_to_strip.add(p)
+
+    surviving = []
+    for abs_t, msg in _decode_track_abs(orig_track):
+        if msg.type in ("note_on", "note_off"):
+            if msg.note in pitches_to_strip: continue
+        surviving.append((abs_t, msg))
+
+    new_events = []
+    for diff in replace_diffs:
+        base = DIFF_BASE_DRUMS[diff]
+        c = drum_charts_by_diff[diff]
+        for n in c.notes:
+            pitch = base + n.lane  # lane 0..4 → kick..green
+            new_events.append((n.tick, mido.Message("note_on",  note=pitch, velocity=n.velocity, time=0)))
+            # Drum notes têm duração mínima — usa 1 tick (gem instantâneo)
+            new_events.append((n.tick + 1, mido.Message("note_off", note=pitch, velocity=0, time=0)))
+
+    all_events = surviving + new_events
+    all_events = [e for e in all_events if not (e[1].type == "end_of_track")]
+    new_track = _abs_to_delta(all_events)
+    new_track.name = "PART DRUMS"
+    new_track.append(mido.MetaMessage("end_of_track", time=0))
+    return new_track
+
+
 def write_reduced_midi(input_mid_path: str, output_mid_path: str,
-                       replace_diffs=("Easy","Medium","Hard")) -> dict:
-    """Lê o notes.mid original, gera reduções para PART GUITAR e escreve novo arquivo."""
+                       replace_diffs=("Easy","Medium","Hard"),
+                       parts=("PART GUITAR", "PART DRUMS")) -> dict:
+    """Lê o notes.mid original, gera reduções para as PARTs especificadas e escreve novo arquivo."""
     mid = mido.MidiFile(input_mid_path)
-    orig_charts = parse_part(mid, "PART GUITAR")
-    expert = orig_charts["Expert"]
-    new_charts = {}
-    for d in replace_diffs:
-        new_charts[d] = reduce_chart(expert, d)
-    # Constrói nova PART GUITAR
+    info = dict(input=input_mid_path, output=output_mid_path,
+                ticks_per_beat=mid.ticks_per_beat,
+                difficulties_generated=list(replace_diffs), parts=list(parts),
+                notes_per_part_diff={})
+
+    # Pre-compute all replacements
+    guitar_charts = None
+    drums_charts = None
+    if "PART GUITAR" in parts:
+        gc = parse_part(mid, "PART GUITAR")
+        guitar_charts = {d: reduce_chart(gc["Expert"], d) for d in replace_diffs}
+        info["notes_per_part_diff"]["PART GUITAR"] = {d: len(guitar_charts[d].notes) for d in replace_diffs}
+    if "PART DRUMS" in parts:
+        dc = parse_drums(mid)
+        drums_charts = {d: reduce_drums(dc["Expert"], d) for d in replace_diffs}
+        info["notes_per_part_diff"]["PART DRUMS"] = {d: len(drums_charts[d].notes) for d in replace_diffs}
+
     out_mid = mido.MidiFile(type=mid.type, ticks_per_beat=mid.ticks_per_beat)
     for tr in mid.tracks:
-        if tr.name == "PART GUITAR":
-            new_tr = _make_guitar_track_from_charts(tr, new_charts, replace_diffs)
-            out_mid.tracks.append(new_tr)
+        if tr.name == "PART GUITAR" and guitar_charts:
+            out_mid.tracks.append(_make_guitar_track_from_charts(tr, guitar_charts, replace_diffs))
+        elif tr.name == "PART DRUMS" and drums_charts:
+            out_mid.tracks.append(_make_drums_track_from_charts(tr, drums_charts, replace_diffs))
         else:
             out_mid.tracks.append(tr)
     out_mid.save(output_mid_path)
-    return dict(
-        input=input_mid_path,
-        output=output_mid_path,
-        ticks_per_beat=mid.ticks_per_beat,
-        difficulties_generated=list(replace_diffs),
-        notes_per_diff={d: len(new_charts[d].notes) for d in replace_diffs},
-    )
+    return info
+
+
+def diff_midi_parts(orig_path: str, gen_path: str) -> dict:
+    """Compara notes.gen vs original em PART GUITAR e PART DRUMS."""
+    orig = mido.MidiFile(orig_path); gen = mido.MidiFile(gen_path)
+    out = {"guitar": {}, "drums": {}}
+    ag = parse_part(orig, "PART GUITAR"); bg = parse_part(gen, "PART GUITAR")
+    for d in ("Easy","Medium","Hard","Expert"):
+        ao = {n.tick for n in ag[d].notes}; bo = {n.tick for n in bg[d].notes}
+        inter = ao & bo
+        out["guitar"][d] = dict(orig=len(ao), gen=len(bo),
+                                recall=round(len(inter)/max(len(ao),1), 2),
+                                precision=round(len(inter)/max(len(bo),1), 2))
+    ad = parse_drums(orig); bd = parse_drums(gen)
+    for d in ("Easy","Medium","Hard","Expert"):
+        ao = {(n.tick, n.lane, n.is_cymbal) for n in ad[d].notes}
+        bo = {(n.tick, n.lane, n.is_cymbal) for n in bd[d].notes}
+        inter = ao & bo
+        out["drums"][d] = dict(orig=len(ao), gen=len(bo),
+                               recall=round(len(inter)/max(len(ao),1), 2),
+                               precision=round(len(inter)/max(len(bo),1), 2))
+    return out
 
 
 def diff_midi(orig_path: str, gen_path: str) -> dict:
-    """Compara um notes.mid gerado vs o original, focado em PART GUITAR."""
+    """Compatibilidade: retorna só guitar (forma antiga)."""
     orig = mido.MidiFile(orig_path); gen = mido.MidiFile(gen_path)
     a = parse_part(orig, "PART GUITAR")
     b = parse_part(gen, "PART GUITAR")
@@ -151,17 +212,16 @@ def diff_midi(orig_path: str, gen_path: str) -> dict:
 if __name__ == "__main__":
     import glob, json
     base = "/Users/gabrielcarvalho/Downloads/system"
-    # Roda em todas as músicas e gera notes.gen.mid no mesmo diretório
     for f in sorted(glob.glob(f"{base}/System*")):
         in_p  = os.path.join(f, "notes.mid")
         out_p = os.path.join(f, "notes.gen.mid")
         info = write_reduced_midi(in_p, out_p)
-        diff = diff_midi(in_p, out_p)
+        diff = diff_midi_parts(in_p, out_p)
         name = os.path.basename(f).replace("System of a Down - ","").replace(" (Harmonix)","")
-        print(f"\n=== {name} ===")
-        print(f"  saída: {out_p}")
-        print(f"  notas geradas: {info['notes_per_diff']}")
-        print(f"  Expert intacto? {diff['Expert']['recall']:.2f} recall  {diff['Expert']['precision']:.2f} prec")
-        for d in ("Easy","Medium","Hard"):
-            r = diff[d]
-            print(f"  {d}: orig={r['orig_notes']} gen={r['gen_notes']} prec={r['precision']:.2f} rec={r['recall']:.2f}")
+        print(f"\n=== {name} ===  saída: {os.path.basename(out_p)}")
+        for part in ("guitar","drums"):
+            ex = diff[part]['Expert']
+            print(f"  {part:6s} Expert intacto: rec={ex['recall']:.2f} prec={ex['precision']:.2f}")
+            for d in ("Easy","Medium","Hard"):
+                r = diff[part][d]
+                print(f"  {part:6s} {d}: orig={r['orig']} gen={r['gen']} prec={r['precision']:.2f} rec={r['recall']:.2f}")
