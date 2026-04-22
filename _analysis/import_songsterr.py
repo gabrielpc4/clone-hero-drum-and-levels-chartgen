@@ -183,33 +183,171 @@ def _collapse_chords(times: List[float], eps: float = 0.015) -> List[float]:
     return out
 
 
-def find_drum_start_beat_ref(ref_mid: mido.MidiFile) -> float:
-    """Primeira nota de bateria Expert (pitches 96-100) na PART DRUMS do ref."""
+def _first_drum_beat_ref(ref_mid: mido.MidiFile) -> float | None:
+    """Primeira nota de bateria Expert do ref (se existir PART DRUMS). None se
+    não há PART DRUMS com notas — caso típico em custom songs."""
     tpb = ref_mid.ticks_per_beat
     dt = next((t for t in ref_mid.tracks if t.name == "PART DRUMS"), None)
-    if dt is None: return 0.0
+    if dt is None: return None
     abs_t = 0
     for msg in dt:
         abs_t += msg.time
         if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
             return abs_t / tpb
-    return 0.0
+    return None
 
 
-def find_drum_start_beat_src(src_mid: mido.MidiFile) -> float:
-    """Primeira nota de bateria no canal 9 do src, IGNORANDO side stick
-    (GM 37) que tipicamente é contagem de baqueta (count-in)."""
+def _first_drum_beat_src(src_mid: mido.MidiFile) -> float | None:
+    """Primeira nota de bateria do src (canal 9) IGNORANDO side stick
+    (GM 37 — típica contagem de baqueta)."""
     tpb = src_mid.ticks_per_beat
-    drum_track = next((t for t in src_mid.tracks
-                       if any(m.type == "note_on" and m.channel == 9 and m.velocity > 0 for m in t)),
-                      None)
-    if drum_track is None: return 0.0
+    for t in src_mid.tracks:
+        if not any(m.type == "note_on" and m.channel == 9 and m.velocity > 0 for m in t):
+            continue
+        abs_t = 0
+        for msg in t:
+            abs_t += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9 and msg.note != 37:
+                return abs_t / tpb
+    return None
+
+
+def _first_guitar_beat_ref(ref_mid: mido.MidiFile) -> float | None:
+    tpb = ref_mid.ticks_per_beat
+    gt = next((t for t in ref_mid.tracks if t.name == "PART GUITAR"), None)
+    if gt is None: return None
     abs_t = 0
-    for msg in drum_track:
+    for msg in gt:
         abs_t += msg.time
-        if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9 and msg.note != 37:
+        if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
             return abs_t / tpb
-    return 0.0
+    return None
+
+
+def _first_guitar_beat_src(src_mid: mido.MidiFile) -> float | None:
+    """Primeira nota de qualquer track cujo nome sugere guitarra/baixo.
+    Ignora vocais e drums."""
+    HINTS = ("guitar", "gibson", "ibanez", "iceman", "strat", "tele",
+             "fender", "bass", "thunderbird")
+    tpb = src_mid.ticks_per_beat
+    first = None
+    for t in src_mid.tracks:
+        name = next((m.name for m in t if m.type == "track_name"), "").lower()
+        if not any(k in name for k in HINTS): continue
+        abs_t = 0
+        for msg in t:
+            abs_t += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and msg.channel != 9:
+                b = abs_t / tpb
+                first = b if first is None else min(first, b)
+                break
+    return first
+
+
+def _collect_all_src_onsets(src_mid: mido.MidiFile) -> List[float]:
+    """Onsets (em beats src) apenas das tracks de GUITARRA do src. Exclui
+    bateria, baixo, piano, strings, vocais — aproximando a 'pool' ao conteúdo
+    que a PART GUITAR do ref representa."""
+    GUITAR_HINTS = ("guitar", "gibson", "ibanez", "iceman", "strat", "tele",
+                    "fender", "electric", "rhythm", "lead", "acoustic", "j-200", "blues king")
+    EXCLUDE = ("bass", "thunderbird", "piano", "yamaha u1", "string", "arrange",
+               "vocal", "vocals")
+    tpb = src_mid.ticks_per_beat
+    out = []
+    for t in src_mid.tracks:
+        name = next((m.name for m in t if m.type == "track_name"), "").lower()
+        if any(k in name for k in EXCLUDE): continue
+        if not any(k in name for k in GUITAR_HINTS): continue
+        abs_t = 0
+        for msg in t:
+            abs_t += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and msg.channel != 9:
+                out.append(abs_t / tpb)
+    return out
+
+
+def _part_guitar_onsets_ref(ref_mid: mido.MidiFile) -> List[float]:
+    tpb = ref_mid.ticks_per_beat
+    gt = next((t for t in ref_mid.tracks if t.name == "PART GUITAR"), None)
+    if gt is None: return []
+    out = []
+    abs_t = 0
+    for msg in gt:
+        abs_t += msg.time
+        if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
+            out.append(abs_t / tpb)
+    return out
+
+
+def align_by_guitar_stencil(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
+                            offset_range: Tuple[float, float] = (-32, 32),
+                            step: float = 0.1,
+                            tol: float = 0.1) -> float:
+    """Alinhamento via 'estêncil rítmico': usa PART GUITAR do ref como padrão e
+    testa offsets para encontrar onde esse padrão melhor se encaixa no conteúdo
+    agregado do Songsterr (todas notas não-drum). Métrica F1 — recall = fração
+    da ref que bate; precision = fração das notas src no range [ref_min+off,
+    ref_max+off] que batem. F1 evita offsets onde src tem muitas notas extras."""
+    ref = _collapse_chords(_part_guitar_onsets_ref(ref_mid), eps=0.08)
+    src = _collapse_chords(_collect_all_src_onsets(src_mid), eps=0.08)
+    if not ref or not src: return 0.0
+
+    ref_sorted = sorted(ref); src_sorted = sorted(src)
+    ref_min, ref_max = ref_sorted[0], ref_sorted[-1]
+
+    best = (-1.0, 0.0)  # (f1, offset)
+    off_min, off_max = offset_range
+    n_steps = int((off_max - off_min) / step) + 1
+    for i in range(n_steps):
+        off = off_min + i * step
+        # Conta matches ref→src deslocado. Equivalente a: ref[i] ≈ src[j] - off.
+        matches = 0
+        for r in ref_sorted:
+            shifted = r - off
+            idx = bisect.bisect_left(src_sorted, shifted)
+            for j in (idx - 1, idx):
+                if 0 <= j < len(src_sorted) and abs(src_sorted[j] - shifted) <= tol:
+                    matches += 1; break
+        if matches == 0: continue
+        # Precision: src notes dentro da janela [ref_min-off, ref_max-off] que batem
+        win_lo = ref_min - off - tol
+        win_hi = ref_max - off + tol
+        src_in_window = [s for s in src_sorted if win_lo <= s <= win_hi]
+        if not src_in_window: continue
+        matches_from_src = 0
+        for s in src_in_window:
+            shifted = s + off
+            idx = bisect.bisect_left(ref_sorted, shifted)
+            for j in (idx - 1, idx):
+                if 0 <= j < len(ref_sorted) and abs(ref_sorted[j] - shifted) <= tol:
+                    matches_from_src += 1; break
+        recall = matches / len(ref_sorted)
+        precision = matches_from_src / len(src_in_window)
+        if recall == 0 or precision == 0: continue
+        f1 = 2 * recall * precision / (recall + precision)
+        if f1 > best[0]: best = (f1, off)
+    return best[1]
+
+
+def resolve_alignment(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
+                      override_offset: float | None = None) -> Tuple[float, float, str]:
+    """Resolve (beat_offset, src_anchor_beat, method_name).
+      1) override_offset manual se fornecido.
+      2) drum-based quando ref TEM PART DRUMS com notas.
+      3) estêncil-de-guitarra via F1 (usa PART GUITAR do ref como template e
+         todas as notas não-drum do src como pool).
+    """
+    if override_offset is not None:
+        return override_offset, 0.0, "override"
+
+    ref_drum = _first_drum_beat_ref(ref_mid)
+    src_drum = _first_drum_beat_src(src_mid)
+    if ref_drum is not None and src_drum is not None:
+        return (ref_drum - src_drum), src_drum, "drum"
+
+    off = align_by_guitar_stencil(ref_mid, src_mid)
+    src_anchor = _first_guitar_beat_src(src_mid) or 0.0
+    return off, src_anchor, "guitar-stencil"
 
 
 def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
@@ -331,21 +469,23 @@ def main():
     ap.add_argument("src_mid", help="MIDI externo (Songsterr/GP/MuseScore) contendo a bateria")
     ap.add_argument("ref_mid", help="notes.mid do chart (referência de guitarra alinhada ao áudio)")
     ap.add_argument("out_mid", help="onde gravar o chart resultante")
+    ap.add_argument("--offset-beats", type=float, default=None,
+                    help="override manual do offset em beats (ref = src + N)")
+    ap.add_argument("--drop-before-src-beat", type=float, default=None,
+                    help="override: dropa notas src antes deste beat")
     args = ap.parse_args()
 
     src = mido.MidiFile(args.src_mid)
     ref = mido.MidiFile(args.ref_mid)
 
-    ref_start = find_drum_start_beat_ref(ref)
-    src_start = find_drum_start_beat_src(src)
-    beat_offset = ref_start - src_start
-    print(f"1ª nota de bateria (sem side-stick count-in) — "
-          f"ref: beat {ref_start:.2f}  src: beat {src_start:.2f}")
-    print(f"Alinhamento: beat_ref = beat_src + {beat_offset:+.3f}")
+    beat_offset, src_anchor, method = resolve_alignment(ref, src, args.offset_beats)
+    print(f"Alinhamento ({method}): beat_ref = beat_src + {beat_offset:+.3f}"
+          f"  | drop_before_src_beat = {args.drop_before_src_beat or src_anchor:.2f}")
 
-    # Remove contagem de baqueta: tudo que vier antes do src_start musical
-    new_drums = build_drums_track(src, beat_offset, ref.ticks_per_beat,
-                                  drop_before_src_beat=src_start)
+    new_drums = build_drums_track(
+        src, beat_offset, ref.ticks_per_beat,
+        drop_before_src_beat=(args.drop_before_src_beat
+                              if args.drop_before_src_beat is not None else src_anchor))
     print(f"PART DRUMS gerado: {sum(1 for m in new_drums if m.type=='note_on' and m.velocity>0)} eventos")
 
     # Monta saída: clona a ref, substitui PART DRUMS
