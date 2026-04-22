@@ -189,11 +189,14 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
 
 
 def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[DrumNote]:
-    """Bane qualquer par de notas mesma-lane (e mesmo cymbal flag) com gap ≤ 1/16 nota,
-       inclusive em snare e kick. Apenas Expert tolera 16ths consecutivos.
-         Hard:   mantém sub0 + sub2 (= colcheias).
-         Medium: mantém sub0 + sub2 (= colcheias, igual Hard).
-         Easy:   mantém apenas sub0 (= semínimas)."""
+    """Bane notas mesma-lane (e mesmo cymbal flag) com gap absoluto ≤ 1/16 nota,
+       inclusive em snare e kick. Apenas Expert tolera notas tão próximas.
+         Hard:   espaçamento mínimo entre notas mantidas = 1/8 (= colcheia).
+         Medium: idem (1/8).
+         Easy:   espaçamento mínimo = 1/4 (= semínima).
+       Implementação greedy temporal: percorre o cluster e mantém apenas notas
+       cujo tick fica ≥ min_gap após a última nota mantida. Robusto a notas
+       off-grid (32nds humanizadas etc.)."""
     if not notes: return notes
     by_lane: Dict[Tuple[int, bool], List[DrumNote]] = defaultdict(list)
     for n in notes:
@@ -201,6 +204,8 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
 
     out: List[DrumNote] = []
     sixteenth = tpb // 4  # 120 ticks @ tpb=480
+    min_gap = tpb // 2 if diff in ("Hard", "Medium") else tpb  # 240 ou 480
+
     for (lane, is_cym), lane_notes in by_lane.items():
         lane_notes.sort(key=lambda n: n.tick)
         i = 0
@@ -212,13 +217,10 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
             if len(cluster) == 1:
                 out.append(cluster[0])
             else:
-                # Cluster ≥2 notas em 16ths consecutivos — decima conforme nível
+                last_tick = None
                 for n in cluster:
-                    sub = (n.tick % tpb) // (tpb // 4)
-                    if diff in ("Hard", "Medium") and sub in (0, 2):
-                        out.append(n)
-                    elif diff == "Easy" and sub == 0:
-                        out.append(n)
+                    if last_tick is None or n.tick - last_tick >= min_gap:
+                        out.append(n); last_tick = n.tick
             i += 1
     out.sort(key=lambda n: (n.tick, n.lane))
     return out
