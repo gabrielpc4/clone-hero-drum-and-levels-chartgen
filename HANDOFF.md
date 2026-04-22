@@ -699,9 +699,9 @@ Documenta tudo sobre a chart de bateria. Análise focada em **descrever** o form
 
 | Pitch | Função |
 |---|---|
-| 110 | **Yellow Cymbal flag** (Pro Drums): durante este intervalo, qualquer nota Yellow Hard/Expert é **prato amarelo (chimbal)** ao invés de tom |
-| 111 | **Blue Cymbal flag**: durante este intervalo, Blue = prato azul (ride/hi-hat aberto) |
-| 112 | **Green Cymbal flag**: durante este intervalo, Green = prato verde (crash) |
+| 110 | **Yellow TOM marker**: durante este intervalo, Y = tom. **Fora do intervalo, Y = prato (hi-hat) por padrão.** |
+| 111 | **Blue TOM marker**: durante este intervalo, B = tom. Fora, B = prato (ride). |
+| 112 | **Green TOM marker**: durante este intervalo, G = tom (surdo). Fora, G = prato (crash). |
 | 105/106 | Player 1/Player 2 markers (RB1) |
 | 116 | Overdrive / Star Power |
 | 120-124 | Drum fill / BRE — 5 pitches simultâneos = 1 drum fill |
@@ -715,6 +715,8 @@ Documenta tudo sobre a chart de bateria. Análise focada em **descrever** o form
 - `[idle]`, `[intense]`, `[play]` — drummer animation cues. Ignorar.
 
 ### 14.2 Pro Drums — diferenciação tom/cymbal
+
+> **Correção 2026-04-22:** a versão inicial deste documento tinha a convenção invertida. A convenção real RBN/CH é: Y/B/G são **pratos por padrão**; os pitches 110/111/112 são **tom markers** que convertem a cor em tom apenas no intervalo em que estão ativos. Verificado visualmente no Moonscraper: o início de Hypnotize (sem markers 110) aparece como hi-hat amarelo.
 
 **Como funciona:** os pitches 110, 111, 112 são "phrase markers" — quando ON, **todas as notas Yellow/Blue/Green** que acontecem dentro daquele intervalo (em Hard/Expert) são interpretadas como **prato** ao invés de **tom**. Quando OFF, são tom.
 

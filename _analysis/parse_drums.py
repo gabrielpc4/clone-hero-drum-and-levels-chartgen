@@ -10,12 +10,15 @@ Pitches por dificuldade (Kick / Snare / Yellow / Blue / Green):
     Expert : 96, 97, 98, 99, 100
 Pitch 95 = 2x bass pedal (Expert+) — kick adicional para "double bass" mode.
 
-Pro Drums cymbal flags (frase-marker, dura vários beats):
-    110 = Yellow lane = CYMBAL (chimbal/hi-hat) durante o intervalo on/off
-    111 = Blue   lane = CYMBAL (ride/hi-hat aberto/etc.)
-    112 = Green  lane = CYMBAL (crash)
-    Quando OFF, a mesma cor é interpretada como TAMBOR (tom).
-    Estes flags só afetam Hard e Expert (E/M ignoram cymbal vs tom).
+Pro Drums tom markers (frase-marker, dura vários beats):
+    110 = Yellow lane = TOM (tambor) durante o intervalo on/off
+    111 = Blue   lane = TOM
+    112 = Green  lane = TOM
+    Quando OFF (padrão), Y/B/G são PRATO (cymbal). Convenção RBN/RB3+:
+    notas amarelas/azuis/verdes são pratos por padrão, e o marker converte
+    para tom somente no intervalo em que está ativo.
+    Estes flags só afetam Hard e Expert (E/M não exibem cymbal vs tom no
+    jogo padrão, mas CH/Moonscraper preserva a distinção).
 
 Marcadores de track (compartilhados entre dificuldades):
     105/106 = Player 1/Player 2 (RB1) ou solo markers
@@ -46,7 +49,7 @@ DIFF_BASE_DRUMS = {"Easy": 60, "Medium": 72, "Hard": 84, "Expert": 96}
 LANE_NAMES = ["Kick", "Snare", "Yellow", "Blue", "Green"]
 LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN = 0, 1, 2, 3, 4
 
-CYMBAL_FLAG_PITCHES = {LANE_YELLOW: 110, LANE_BLUE: 111, LANE_GREEN: 112}
+TOM_FLAG_PITCHES = {LANE_YELLOW: 110, LANE_BLUE: 111, LANE_GREEN: 112}
 
 
 @dataclass
@@ -101,28 +104,28 @@ def parse_drums(mid: mido.MidiFile) -> Dict[str, DrumChart]:
     # Markers compartilhados
     overdrive: List[Tuple[int, int]] = []
     drum_fills: List[Tuple[int, int]] = []
-    cymbal_intervals: Dict[int, List[Tuple[int, int]]] = {LANE_YELLOW: [], LANE_BLUE: [], LANE_GREEN: []}
+    tom_intervals: Dict[int, List[Tuple[int, int]]] = {LANE_YELLOW: [], LANE_BLUE: [], LANE_GREEN: []}
     fill_starts: Dict[int, List[int]] = defaultdict(list)
     for s, e, p, v in pairs:
         if p == 116:
             overdrive.append((s, e))
         elif p == 110:
-            cymbal_intervals[LANE_YELLOW].append((s, e))
+            tom_intervals[LANE_YELLOW].append((s, e))
         elif p == 111:
-            cymbal_intervals[LANE_BLUE].append((s, e))
+            tom_intervals[LANE_BLUE].append((s, e))
         elif p == 112:
-            cymbal_intervals[LANE_GREEN].append((s, e))
+            tom_intervals[LANE_GREEN].append((s, e))
         elif 120 <= p <= 124:
             fill_starts[p].append((s, e))
-    # 5 fill pitches simultâneos = 1 drum fill
     if fill_starts.get(120):
         for (s, e) in fill_starts[120]:
             drum_fills.append((s, e))
 
-    # Helper: o tick está dentro de algum cymbal flag?
-    def in_cymbal_flag(tick: int, lane: int) -> bool:
+    # Convenção Pro Drums: Y/B/G são PRATO por padrão; marker 110/111/112 ativa
+    # converte a mesma cor em TOM naquele intervalo.
+    def in_tom_marker(tick: int, lane: int) -> bool:
         if lane not in (LANE_YELLOW, LANE_BLUE, LANE_GREEN): return False
-        for s, e in cymbal_intervals[lane]:
+        for s, e in tom_intervals[lane]:
             if s <= tick < e: return True
         return False
 
@@ -130,14 +133,17 @@ def parse_drums(mid: mido.MidiFile) -> Dict[str, DrumChart]:
     for diff, base in DIFF_BASE_DRUMS.items():
         c = DrumChart(difficulty=diff, ticks_per_beat=tpb,
                       overdrive=overdrive, drum_fills=drum_fills,
-                      cymbal_flags=cymbal_intervals)
+                      cymbal_flags=tom_intervals)  # mantém o nome do campo para compat
         for s, e, p, v in pairs:
             offset = p - base
             if 0 <= offset <= 4:
                 lane = offset
-                is_cym = in_cymbal_flag(s, lane) if diff in ("Hard", "Expert") else False
+                # Y/B/G: default=cymbal, marker=tom
+                if lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN):
+                    is_cym = not in_tom_marker(s, lane)
+                else:
+                    is_cym = False
                 c.notes.append(DrumNote(tick=s, lane=lane, is_cymbal=is_cym, velocity=v))
-            # 2x kick (Expert+) usa pitch 95 — só Expert
             elif p == 95 and diff == "Expert":
                 c.notes.append(DrumNote(tick=s, lane=LANE_KICK, is_2x_kick=True, velocity=v))
         c.notes.sort(key=lambda n: (n.tick, n.lane))
