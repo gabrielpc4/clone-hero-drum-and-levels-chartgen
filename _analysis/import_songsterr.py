@@ -424,11 +424,11 @@ def _build_anchor_pairs(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
         eps=0.03)
     if not ref_onsets or not src_onsets: return []
 
-    pairs: List[Tuple[float, float]] = [(0.0, beat_offset_sec)]  # âncora inicial
+    pairs: List[Tuple[float, float]] = []
     src_sorted = sorted(src_onsets)
     last_src, last_ref = 0.0, beat_offset_sec
     for r in sorted(ref_onsets):
-        expected_src = last_src + (r - last_ref)  # estimativa linear do src correspondente
+        expected_src = r - beat_offset_sec  # estimativa: src_sec = ref_sec - offset
         # Busca src mais próximo à expected_src dentro de ±max_gap
         lo = bisect.bisect_left(src_sorted, expected_src - max_gap_sec)
         hi = bisect.bisect_right(src_sorted, expected_src + max_gap_sec)
