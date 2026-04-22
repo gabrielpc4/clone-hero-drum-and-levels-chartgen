@@ -39,6 +39,27 @@ CUSTOM="$DESKTOP/SOAD-custom"
 rm -rf "$OFICIAL" "$GERADO" "$CUSTOM"
 mkdir -p "$OFICIAL" "$GERADO" "$CUSTOM"
 
+# Converte/copia áudio .opus para a pasta destino. Moonscraper não lê .opus,
+# então transcodamos para .ogg (Vorbis, qualidade 6 ~ 192kbps). Cache: se o
+# .ogg já existe em cache/ com mtime ≥ ao do .opus, reaproveita.
+CACHE_DIR="$REPO_DIR/_cache_ogg"
+mkdir -p "$CACHE_DIR"
+
+copy_audio_as_ogg() {
+  local src_folder="$1" dst_folder="$2"
+  for opus in "$src_folder"/*.opus; do
+    [ -f "$opus" ] || continue
+    local base="$(basename "$opus" .opus)"
+    # Hash do caminho absoluto + mtime para chave de cache estável por song
+    local key="$(echo -n "$opus" | shasum -a 1 | cut -c1-12)-$base"
+    local cached="$CACHE_DIR/$key.ogg"
+    if [ ! -f "$cached" ] || [ "$opus" -nt "$cached" ]; then
+      ffmpeg -loglevel error -y -i "$opus" -c:a libvorbis -q:a 6 "$cached"
+    fi
+    cp "$cached" "$dst_folder/$base.ogg"
+  done
+}
+
 count=0
 for src in "$REPO_DIR"/System*/; do
   song_full="$(basename "$src")"
@@ -53,7 +74,7 @@ for src in "$REPO_DIR"/System*/; do
   cp "$src/notes.mid" "$off_dir/notes.mid"
   [ -f "$src/song.ini" ]  && cp "$src/song.ini"  "$off_dir/"
   [ -f "$src/album.jpg" ] && cp "$src/album.jpg" "$off_dir/"
-  cp "$src"/*.opus "$off_dir/" 2>/dev/null || true
+  copy_audio_as_ogg "$src" "$off_dir"
 
   # Gerado (notes.gen.mid renomeado para notes.mid)
   if [ -f "$src/notes.gen.mid" ]; then
@@ -63,7 +84,7 @@ for src in "$REPO_DIR"/System*/; do
   fi
   [ -f "$src/song.ini" ]  && cp "$src/song.ini"  "$gen_dir/"
   [ -f "$src/album.jpg" ] && cp "$src/album.jpg" "$gen_dir/"
-  cp "$src"/*.opus "$gen_dir/" 2>/dev/null || true
+  copy_audio_as_ogg "$src" "$gen_dir"
 
   count=$((count + 1))
 done
@@ -77,8 +98,13 @@ if [ -d "$REPO_DIR/custom" ]; then
     short_name="$(echo "$song_full" | sed -e 's/System of a Down - //')"
     dst="$CUSTOM/$short_name"
     mkdir -p "$dst"
-    # Copia todos os arquivos da pasta (notes.chart, notes.mid, song.ini, album.jpg, background.jpg, *.opus)
-    cp "$src"/* "$dst/" 2>/dev/null || true
+    # Copia todos os arquivos não-opus, e transcoda .opus → .ogg para Moonscraper
+    for f in "$src"/*; do
+      [ -f "$f" ] || continue
+      case "$f" in *.opus) continue;; esac
+      cp "$f" "$dst/"
+    done
+    copy_audio_as_ogg "$src" "$dst"
     custom_count=$((custom_count + 1))
   done
 fi
