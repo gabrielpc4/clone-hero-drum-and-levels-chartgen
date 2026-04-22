@@ -259,6 +259,32 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     if drum_track is None:
         raise RuntimeError("Nenhum track de bateria (canal 9) encontrado")
 
+    # Pré-coleta hi-hats (closed=GM42, open=GM46) para classificar GM46 como
+    # accent (= azul, B-cym) vs seção sustentada de open (= amarelo, Y-cym).
+    # Heurística: se na janela ±2 beats em torno da nota open há ≥3 closed
+    # e o open é minoria, então é um accent → azul. Caso contrário → amarelo.
+    abs_src = 0
+    hh_closed_beats: List[float] = []
+    hh_open_beats:   List[float] = []
+    for msg in drum_track:
+        abs_src += msg.time
+        if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
+            beat = abs_src / src_tpb
+            if msg.note == 42: hh_closed_beats.append(beat)
+            elif msg.note == 46: hh_open_beats.append(beat)
+    hh_closed_beats.sort()
+    open_is_accent: Dict[float, bool] = {}
+    WINDOW = 2.0  # beats
+    for ob in hh_open_beats:
+        # quantos closed na janela?
+        lo = bisect.bisect_left(hh_closed_beats, ob - WINDOW)
+        hi = bisect.bisect_right(hh_closed_beats, ob + WINDOW)
+        n_closed = hi - lo
+        # quantos open na mesma janela?
+        n_open = sum(1 for o in hh_open_beats if abs(o - ob) <= WINDOW)
+        # accent: ≥3 closed na vizinhança e open é minoria
+        open_is_accent[ob] = (n_closed >= 3 and n_closed > n_open)
+
     abs_src = 0
     events_abs = []  # (tick_target, pitch, lane, is_cym)
     for msg in drum_track:
@@ -270,6 +296,9 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
             rb = GM_TO_RB.get(msg.note)
             if rb is None: continue
             lane, is_cym = rb
+            # Override: open hi-hat (GM 46) só fica em B-cym (azul) quando é accent.
+            if msg.note == 46 and not open_is_accent.get(src_beat, False):
+                lane, is_cym = LANE_YELLOW, True
             target_tick = int(round(tgt_beat * target_tpb))
             pitch_expert = 96 + lane
             events_abs.append((target_tick, pitch_expert, lane, is_cym))
