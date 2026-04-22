@@ -459,8 +459,10 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     #   - Outras lanes: segunda nota descartada (simples dedup).
     dedup_gap_ticks = int(round(src_tpb * dedup_beats))
     last_tick_by_lane: Dict[Tuple[int, bool], int] = {}
-    dedup_skipped: set = set()
-    flam_snare_second: set = set()  # ticks src: segunda nota de flam em snare → vira Y-tom
+    # Chave usa (tick, pitch) — não só tick — porque várias lanes podem compartilhar
+    # o mesmo tick (ex: crash+kick simultâneos, que NÃO é flam).
+    dedup_skipped: set = set()          # {(tick, pitch)}
+    flam_snare_second: set = set()      # {(tick, pitch)}
     abs_src = 0
     for msg in drum_track:
         abs_src += msg.time
@@ -474,10 +476,10 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
             last = last_tick_by_lane.get(key)
             if last is not None and abs_src - last <= dedup_gap_ticks:
                 if lane_raw == LANE_SNARE:
-                    flam_snare_second.add(abs_src)
-                    last_tick_by_lane[key] = abs_src  # atualiza âncora para próximo check
+                    flam_snare_second.add((abs_src, msg.note))
+                    last_tick_by_lane[key] = abs_src
                 else:
-                    dedup_skipped.add(abs_src)
+                    dedup_skipped.add((abs_src, msg.note))
             else:
                 last_tick_by_lane[key] = abs_src
 
@@ -491,7 +493,7 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         for msg in drum_track:
             abs_src += msg.time
             if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-                if abs_src in dedup_skipped: continue
+                if (abs_src, msg.note) in dedup_skipped: continue
                 if abs_src / src_tpb < drop_before_src_beat: continue
                 src_sec = tick_to_seconds(abs_src, src_tm)
                 target_sec = anchor_ref_sec + time_scale * (src_sec - anchor_src_sec)
@@ -501,7 +503,7 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                 lane, is_cym = rb
                 if msg.note == 46:
                     lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
-                if abs_src in flam_snare_second:  # flam em snare: 2ª nota vira Y-tom
+                if (abs_src, msg.note) in flam_snare_second:  # flam em snare: 2ª nota vira Y-tom
                     lane, is_cym = LANE_YELLOW, False
                 target_tick = _sec_to_tick(target_sec, ref_tempo_map)
                 events_abs.append((target_tick, 96 + lane, lane, is_cym))
@@ -509,7 +511,7 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         for msg in drum_track:
             abs_src += msg.time
             if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-                if abs_src in dedup_skipped: continue
+                if (abs_src, msg.note) in dedup_skipped: continue
                 src_beat = abs_src / src_tpb
                 if src_beat < drop_before_src_beat: continue
                 tgt_beat = src_beat + beat_offset
@@ -519,7 +521,7 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                 lane, is_cym = rb
                 if msg.note == 46:
                     lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
-                if abs_src in flam_snare_second:
+                if (abs_src, msg.note) in flam_snare_second:
                     lane, is_cym = LANE_YELLOW, False
                 target_tick = int(round(tgt_beat * target_tpb))
                 events_abs.append((target_tick, 96 + lane, lane, is_cym))
