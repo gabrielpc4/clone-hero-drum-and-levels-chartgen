@@ -208,12 +208,33 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
     if not notes: return notes
     sixteenth = tpb // 4  # 120 ticks @ tpb=480
 
+    # Heurística: detecta "ostinato de tom" — sequência longa de notas Y/B/G tom
+    # numa única lane com gaps ≤ 1/16. Isso normalmente indica que a Harmonix
+    # marcou como tom mas musicalmente é hi-hat (Pro Drums sem cymbal flag).
+    # Marcamos esses ticks para tratar como prato (min_gap maior).
+    sixteenth = tpb // 4
+    ostinato_ticks: Set[int] = set()
+    for tom_lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN):
+        lane_toms = sorted([n for n in notes if n.lane == tom_lane and not n.is_cymbal],
+                           key=lambda n: n.tick)
+        i = 0
+        while i < len(lane_toms):
+            run = [lane_toms[i]]
+            while i + 1 < len(lane_toms) and lane_toms[i+1].tick - run[-1].tick <= sixteenth:
+                run.append(lane_toms[i+1]); i += 1
+            if len(run) >= 4:
+                for n in run: ostinato_ticks.add((n.tick, tom_lane))
+            i += 1
+
     # Define vozes
     voices: Dict[str, List[DrumNote]] = defaultdict(list)
     for n in notes:
         is_tom = n.lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and not n.is_cymbal
-        if diff == "Hard" and is_tom:
-            voice_id = "TOMS_HARD"  # tambores Y/B/G juntos (preserva viradas)
+        is_ostinato = is_tom and (n.tick, n.lane) in ostinato_ticks
+        if is_ostinato:
+            voice_id = f"ost{n.lane}"  # voz dedicada para ostinato (= prato)
+        elif diff == "Hard" and is_tom:
+            voice_id = "TOMS_HARD"
         elif n.lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and n.is_cymbal:
             voice_id = f"cym{n.lane}"
         else:
@@ -225,13 +246,18 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
         is_toms_hard = voice_id == "TOMS_HARD"
         is_kick_hard = diff == "Hard" and voice_id == f"L{LANE_KICK}"
         is_snare_hard = diff == "Hard" and voice_id == f"L{LANE_SNARE}"
+        is_ostinato = voice_id.startswith("ost")  # tratado como prato (min_gap=1/8)
         if diff == "Easy":
             min_gap = tpb            # 1/4
         elif diff == "Medium":
             min_gap = tpb // 2       # 1/8
         else:  # Hard
-            # toms, kick e snare → 1/16; só pratos ficam limitados a 1/8
-            min_gap = tpb // 4 if (is_toms_hard or is_kick_hard or is_snare_hard) else tpb // 2
+            if is_ostinato:
+                min_gap = tpb // 2   # ostinato (= hi-hat sem flag) → 1/8
+            elif is_toms_hard or is_kick_hard or is_snare_hard:
+                min_gap = tpb // 4   # toms-virada / kick / snare → 1/16
+            else:
+                min_gap = tpb // 2   # pratos → 1/8
 
         # Greedy temporal direto: percorre as notas em ordem e mantém só as
         # que estão a ≥ min_gap da última mantida. Garante a regra mesmo para
