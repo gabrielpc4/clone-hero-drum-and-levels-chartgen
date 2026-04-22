@@ -183,39 +183,49 @@ def _collapse_chords(times: List[float], eps: float = 0.015) -> List[float]:
     return out
 
 
-def detect_beat_offset(ref_beats: List[float], src_beats: List[float]) -> float:
-    """Encontra offset em BEATS que alinha src → ref.
+def find_music_start_beat_ref(ref_mid: mido.MidiFile) -> float:
+    """Acha o beat onde a música começa no chart de referência. Usa o primeiro
+    marcador de seção encontrado em EVENTS (ex.: '[section gtr_intro_a]',
+    '[section intro]', '[music_start]'). Fallback: primeira nota de PART GUITAR."""
+    tpb = ref_mid.ticks_per_beat
+    ev = next((t for t in ref_mid.tracks if t.name == "EVENTS"), None)
+    if ev is not None:
+        abs_t = 0
+        for msg in ev:
+            abs_t += msg.time
+            if msg.type in ("text", "marker"):
+                txt = msg.text
+                if txt.startswith("[section ") or txt == "[music_start]":
+                    return abs_t / tpb
+    gt = next((t for t in ref_mid.tracks if t.name == "PART GUITAR"), None)
+    if gt is not None:
+        abs_t = 0
+        for msg in gt:
+            abs_t += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
+                return abs_t / tpb
+    return 0.0
 
-    Estratégia: colapsa gems em ambas, usa a diferença dos primeiros gems
-    como chute (primeira nota musical de guitarra é âncora), então testa
-    offsets próximos no grid para casos onde a primeira nota não corresponde
-    exatamente (pickup beat, silêncio inicial diferente etc.).
 
-    Não tenta resolver quantização (Songsterr às vezes tem tercinas onde
-    Harmonix quantizou em 16ths). Isso aceita pequeno drift interno — o
-    essencial é alinhar no BEAT."""
-    ref_g = _collapse_chords(ref_beats, eps=0.1)
-    src_g = _collapse_chords(src_beats, eps=0.1)
-    if not ref_g or not src_g: return 0.0
-
-    # Chute inicial: primeira nota ref vs primeira nota src
-    off0 = ref_g[0] - src_g[0]
-    best = (_score_alignment(ref_g, src_g, off0, 1.0, tol=0.25), off0)
-
-    # Testa offsets deslocados por múltiplos de beats (caso primeira nota src
-    # seja um pickup que não existe no ref, ou vice-versa)
-    for whole_beats in range(-32, 33):
-        off = off0 + whole_beats
-        s = _score_alignment(ref_g, src_g, off, 1.0, tol=0.25)
-        if s > best[0]: best = (s, off)
-    # Refina com passo fino
-    off1 = best[1]
-    for off_d in range(-50, 51):
-        off = off1 + off_d * 0.01
-        s = _score_alignment(ref_g, src_g, off, 1.0, tol=0.1)
-        if s > best[0]: best = (s, off)
-
-    return best[1]
+def find_music_start_beat_src(src_mid: mido.MidiFile) -> float:
+    """Primeiro evento musical 'real' no MIDI externo — primeira nota de
+    qualquer track cujo nome contenha guitarra/bass/ibanez/gibson/iceman/etc.
+    Ignora drums (contagem de baqueta) e vocais (vocalizações pré-música)."""
+    tpb = src_mid.ticks_per_beat
+    GUITAR_HINTS = ("guitar", "gibson", "ibanez", "iceman", "strat", "tele",
+                    "bass", "thunderbird", "rickenbacker")
+    first = None
+    for t in src_mid.tracks:
+        name = next((m.name for m in t if m.type == "track_name"), "").lower()
+        if not any(k in name for k in GUITAR_HINTS): continue
+        abs_t = 0
+        for msg in t:
+            abs_t += msg.time
+            if msg.type == "note_on" and msg.velocity > 0:
+                b = abs_t / tpb
+                first = b if first is None else min(first, b)
+                break
+    return first if first is not None else 0.0
 
 
 def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
@@ -319,26 +329,10 @@ def main():
     src = mido.MidiFile(args.src_mid)
     ref = mido.MidiFile(args.ref_mid)
 
-    src_gt = find_guitar_track(src)
-    if src_gt is None:
-        raise RuntimeError("Não achei track de guitarra no MIDI externo")
-    src_name = next((m.name for m in src_gt if m.type == "track_name"), "?")
-    print(f"Guitarra externa: {src_name!r}")
-
-    ref_guitar = next((t for t in ref.tracks if t.name == "PART GUITAR"), None)
-    if ref_guitar is None:
-        raise RuntimeError("ref_mid não tem PART GUITAR")
-    ref_beats = []
-    abs_t = 0
-    for msg in ref_guitar:
-        abs_t += msg.time
-        if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
-            ref_beats.append(tick_to_beats(abs_t, ref.ticks_per_beat))
-
-    src_beats = extract_note_beats(src_gt, src.ticks_per_beat)
-    print(f"Onsets — ref: {len(ref_beats)}, src: {len(src_beats)}")
-
-    beat_offset = detect_beat_offset(ref_beats, src_beats)
+    ref_start = find_music_start_beat_ref(ref)
+    src_start = find_music_start_beat_src(src)
+    beat_offset = ref_start - src_start
+    print(f"Início musical — ref: beat {ref_start:.2f}  src: beat {src_start:.2f}")
     print(f"Alinhamento: beat_ref = beat_src + {beat_offset:+.3f}")
 
     new_drums = build_drums_track(src, beat_offset, ref.ticks_per_beat)
