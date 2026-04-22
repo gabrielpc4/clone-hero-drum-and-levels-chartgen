@@ -13,6 +13,7 @@ Common markers: 103=SP(rb2)|Solo(rb1 alt), 104=Tap(CH), 105/106=P1/P2 (RB1) or S
 """
 from __future__ import annotations
 import mido
+from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
@@ -51,6 +52,37 @@ class Chart:
     time_sigs: List[Tuple[int, int, int]] = field(default_factory=list)  # (tick, num, denom)
 
 
+@dataclass
+class TempoMap:
+    """Converte ticks MIDI <-> segundos respeitando mudanças de tempo."""
+    ticks_per_beat: int
+    change_ticks: List[int]
+    change_seconds: List[float]
+    tempos: List[int]
+
+    def tick_to_seconds(self, tick: int) -> float:
+        idx = bisect_right(self.change_ticks, tick) - 1
+        idx = max(idx, 0)
+
+        base_tick = self.change_ticks[idx]
+        base_seconds = self.change_seconds[idx]
+        tempo = self.tempos[idx]
+
+        return base_seconds + mido.tick2second(tick - base_tick, self.ticks_per_beat, tempo)
+
+    def seconds_to_tick(self, seconds: float) -> int:
+        idx = bisect_right(self.change_seconds, seconds) - 1
+        idx = max(idx, 0)
+
+        base_tick = self.change_ticks[idx]
+        base_seconds = self.change_seconds[idx]
+        tempo = self.tempos[idx]
+
+        delta_tick = mido.second2tick(seconds - base_seconds, self.ticks_per_beat, tempo)
+
+        return int(round(base_tick + delta_tick))
+
+
 def _decode_note_pairs(track):
     """Yield (start_tick, end_tick, pitch) for every note on/off pair in order."""
     abs_t = 0
@@ -67,6 +99,57 @@ def _decode_note_pairs(track):
     return out
 
 
+def read_conductor_track(mid: mido.MidiFile) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int, int]]]:
+    """Lê track 0 e devolve tempo map + time signatures."""
+    tempos: List[Tuple[int, int]] = []
+    sigs: List[Tuple[int, int, int]] = []
+    abs_t = 0
+
+    for msg in mid.tracks[0]:
+        abs_t += msg.time
+
+        if msg.type == "set_tempo":
+            if tempos and tempos[-1][0] == abs_t:
+                tempos[-1] = (abs_t, msg.tempo)
+            else:
+                tempos.append((abs_t, msg.tempo))
+        elif msg.type == "time_signature":
+            sigs.append((abs_t, msg.numerator, msg.denominator))
+
+    if not tempos or tempos[0][0] != 0:
+        tempos.insert(0, (0, 500000))
+
+    return tempos, sigs
+
+
+def build_tempo_map(mid: mido.MidiFile) -> TempoMap:
+    """Pré-calcula segmentos para converter ticks <-> segundos."""
+    tempos, _ = read_conductor_track(mid)
+
+    change_ticks = [tick for tick, _ in tempos]
+    tempo_values = [tempo for _, tempo in tempos]
+    change_seconds = [0.0]
+
+    for index in range(1, len(tempos)):
+        previous_tick, previous_tempo = tempos[index - 1]
+        current_tick, _ = tempos[index]
+
+        elapsed_seconds = mido.tick2second(
+            current_tick - previous_tick,
+            mid.ticks_per_beat,
+            previous_tempo,
+        )
+
+        change_seconds.append(change_seconds[-1] + elapsed_seconds)
+
+    return TempoMap(
+        ticks_per_beat=mid.ticks_per_beat,
+        change_ticks=change_ticks,
+        change_seconds=change_seconds,
+        tempos=tempo_values,
+    )
+
+
 def parse_part(mid: mido.MidiFile, part_name: str) -> Dict[str, Chart]:
     """Return {difficulty -> Chart} for the named PART track."""
     track = next((t for t in mid.tracks if t.name == part_name), None)
@@ -75,15 +158,7 @@ def parse_part(mid: mido.MidiFile, part_name: str) -> Dict[str, Chart]:
 
     pairs = _decode_note_pairs(track)
 
-    # Tempo / time-sig from track 0 (conductor track).
-    tempos, sigs = [], []
-    abs_t = 0
-    for msg in mid.tracks[0]:
-        abs_t += msg.time
-        if msg.type == "set_tempo":
-            tempos.append((abs_t, msg.tempo))
-        elif msg.type == "time_signature":
-            sigs.append((abs_t, msg.numerator, msg.denominator))
+    tempos, sigs = read_conductor_track(mid)
 
     # Part-level markers (overdrive=116, solos=103/105/106).
     overdrive: List[Tuple[int,int]] = []
