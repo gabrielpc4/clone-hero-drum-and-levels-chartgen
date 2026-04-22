@@ -259,31 +259,23 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     if drum_track is None:
         raise RuntimeError("Nenhum track de bateria (canal 9) encontrado")
 
-    # Pré-coleta hi-hats (closed=GM42, open=GM46) para classificar GM46 como
-    # accent (= azul, B-cym) vs seção sustentada de open (= amarelo, Y-cym).
-    # Heurística: se na janela ±2 beats em torno da nota open há ≥3 closed
-    # e o open é minoria, então é um accent → azul. Caso contrário → amarelo.
-    abs_src = 0
-    hh_closed_beats: List[float] = []
-    hh_open_beats:   List[float] = []
-    for msg in drum_track:
-        abs_src += msg.time
-        if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-            beat = abs_src / src_tpb
-            if msg.note == 42: hh_closed_beats.append(beat)
-            elif msg.note == 46: hh_open_beats.append(beat)
-    hh_closed_beats.sort()
-    open_is_accent: Dict[float, bool] = {}
-    WINDOW = 2.0  # beats
-    for ob in hh_open_beats:
-        # quantos closed na janela?
-        lo = bisect.bisect_left(hh_closed_beats, ob - WINDOW)
-        hi = bisect.bisect_right(hh_closed_beats, ob + WINDOW)
-        n_closed = hi - lo
-        # quantos open na mesma janela?
-        n_open = sum(1 for o in hh_open_beats if abs(o - ob) <= WINDOW)
-        # accent: ≥3 closed na vizinhança e open é minoria
-        open_is_accent[ob] = (n_closed >= 3 and n_closed > n_open)
+    # Classifica o papel do open hi-hat (GM 46) na música inteira:
+    #   - Se open domina (>= 70% do total de hi-hat events), é "hi-hat folgado"
+    #     (sustain wash): vai pra Y-cym (amarelo).
+    #   - Senão, open tipicamente representa ride ou accent e vai pra B-cym (azul).
+    #     Nesse modo, ainda fazemos fallback contextual: se um open aparece em
+    #     cluster onde só tem open (sem closed próximo), mantém Y-cym.
+    n_closed = sum(1 for msg in drum_track
+                   if msg.type == "note_on" and msg.velocity > 0
+                   and msg.channel == 9 and msg.note == 42)
+    n_open = sum(1 for msg in drum_track
+                 if msg.type == "note_on" and msg.velocity > 0
+                 and msg.channel == 9 and msg.note == 46)
+    total_hh = n_closed + n_open
+    open_mode_yellow = total_hh > 0 and (n_open / total_hh) >= 0.70
+    # print útil para diagnóstico
+    print(f"Hi-hat Songsterr: {n_closed} closed, {n_open} open  "
+          f"→ open vai pra {'Y-cym (amarelo, dominante)' if open_mode_yellow else 'B-cym (azul, ride/accent)'}")
 
     abs_src = 0
     events_abs = []  # (tick_target, pitch, lane, is_cym)
@@ -297,9 +289,10 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
             rb = GM_TO_RB.get(msg.note)
             if rb is None: continue
             lane, is_cym = rb
-            # Override: open hi-hat (GM 46) só fica em B-cym (azul) quando é accent.
-            if msg.note == 46 and not open_is_accent.get(src_beat, False):
-                lane, is_cym = LANE_YELLOW, True
+            # Override open hi-hat (GM 46): amarelo se é modo dominante (hi-hat
+            # folgado), azul se a música tem mix de closed+open (open = ride).
+            if msg.note == 46:
+                lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
             target_tick = int(round(tgt_beat * target_tpb))
             pitch_expert = 96 + lane
             events_abs.append((target_tick, pitch_expert, lane, is_cym))
