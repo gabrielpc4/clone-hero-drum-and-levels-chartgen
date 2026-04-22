@@ -950,8 +950,8 @@ Após validação visual, o usuário pediu **dois desvios das regras observadas*
 
 **Override 2: Anti-16ths-consecutivos em Easy/Medium/Hard**
 - Qualquer **par** de notas mesma lane com gap ≤ 1/16 nota (=tpb/4) é considerado "rápido demais" para E/M/H — só Expert tolera 16ths consecutivos.
-- **Hard:** mantém sub0 + sub2 (= colcheias).
-- **Medium e Easy:** mantém só sub0 (= semínimas).
+- **Hard e Medium:** mantém sub0 + sub2 (= colcheias).
+- **Easy:** mantém só sub0 (= semínimas).
 - Não afeta snare (D-R2 sagrada) nem kick (já decimado por D-R3).
 - Caso disparador: início de Hypnotize tem amarelo 16ths que o oficial mantém integral em Hard, mas o usuário considerou "muito rápido pro Hard".
 
