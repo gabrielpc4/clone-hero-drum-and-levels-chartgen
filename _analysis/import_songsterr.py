@@ -624,11 +624,12 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         anchor_ref_sec = tick_to_seconds(anchor_ref_tick, ref_tempo_map)
         # Multi-anchor: se ref_mid fornecido, usa guitarra do ref como ground
         # truth de tempo ao longo da música; interpola piecewise-linear.
-        # Multi-anchor (opcional): alinha guitarra ref ↔ guitarra src ao longo
-        # da música. Desabilitado por padrão — matches falsos nas guitarras
-        # Songsterr introduzem ruído. Ativar apenas se quiser experimentar.
+        # Multi-anchor (default): alinha guitarra ref ↔ guitarra src ao longo
+        # da música, usa cada par como âncora e interpola piecewise linear.
+        # Corrige drift interno onde tempo map do Songsterr não segue variações
+        # do áudio. Pode ser desativado via IMPORT_MULTI_ANCHOR=0.
         anchor_pairs = []
-        if ref_mid is not None and os.environ.get("IMPORT_MULTI_ANCHOR") == "1":
+        if ref_mid is not None and os.environ.get("IMPORT_MULTI_ANCHOR") != "0":
             anchor_pairs = _build_anchor_pairs(
                 ref_mid, src_mid, ref_tempo_map, src_tm,
                 beat_offset_sec=(anchor_ref_sec - anchor_src_sec))
