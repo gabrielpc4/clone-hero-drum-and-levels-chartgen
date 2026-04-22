@@ -52,6 +52,7 @@ for src in "$REPO_DIR"/System*/; do
   cp "$src/notes.mid" "$off_dir/notes.mid"
   [ -f "$src/song.ini" ]  && cp "$src/song.ini"  "$off_dir/"
   [ -f "$src/album.jpg" ] && cp "$src/album.jpg" "$off_dir/"
+  [ -f "$src/song.opus" ] && cp "$src/song.opus" "$off_dir/"
 
   # Gerado (notes.gen.mid renomeado para notes.mid)
   if [ -f "$src/notes.gen.mid" ]; then
@@ -61,6 +62,7 @@ for src in "$REPO_DIR"/System*/; do
   fi
   [ -f "$src/song.ini" ]  && cp "$src/song.ini"  "$gen_dir/"
   [ -f "$src/album.jpg" ] && cp "$src/album.jpg" "$gen_dir/"
+  [ -f "$src/song.opus" ] && cp "$src/song.opus" "$gen_dir/"
 
   count=$((count + 1))
 done
