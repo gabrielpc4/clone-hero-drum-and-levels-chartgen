@@ -189,38 +189,52 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
 
 
 def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[DrumNote]:
-    """Bane notas mesma-lane (e mesmo cymbal flag) com gap absoluto ≤ 1/16 nota,
-       inclusive em snare e kick. Apenas Expert tolera notas tão próximas.
+    """Bane notas com gap absoluto ≤ 1/16 nota, dentro de cada "voz".
+       Voz = grupo de notas que disputam o mesmo limiar de espaçamento.
+
+       Em Hard, **tambores Y/B/G são tratados como UMA SÓ voz** (em vez de uma
+       voz por lane), o que permite preservar viradas: o min_gap=1/16 conta
+       entre tambores diferentes, não entre cada par de notas da mesma lane.
+       Snare, kick e cada cor de prato continuam vozes separadas.
+
+       Em Medium/Easy, cada (lane, is_cymbal) é uma voz separada (mais agressivo).
 
        Espaçamento mínimo entre notas mantidas (greedy temporal):
-         Hard:   1/8 (colcheia) para snare/kick/pratos; 1/16 (= dobro da freq) para TAMBORES Y/B/G
+         Hard:   1/16 para a voz de tambores (Y/B/G juntos); 1/8 para snare/kick/pratos
          Medium: 1/8 para todos
          Easy:   1/4 (semínima) para todos
-
-       Robusto a notas off-grid (32nds humanizadas etc.)."""
+    """
     if not notes: return notes
-    by_lane: Dict[Tuple[int, bool], List[DrumNote]] = defaultdict(list)
-    for n in notes:
-        by_lane[(n.lane, n.is_cymbal)].append(n)
-
-    out: List[DrumNote] = []
     sixteenth = tpb // 4  # 120 ticks @ tpb=480
 
-    for (lane, is_cym), lane_notes in by_lane.items():
-        is_tom = lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and not is_cym
-        if diff == "Easy":
-            min_gap = tpb           # 1/4
-        elif diff == "Medium":
-            min_gap = tpb // 2      # 1/8
-        else:  # Hard
-            min_gap = tpb // 4 if is_tom else tpb // 2   # tambores até 1/16; resto 1/8
+    # Define vozes
+    voices: Dict[str, List[DrumNote]] = defaultdict(list)
+    for n in notes:
+        is_tom = n.lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and not n.is_cymbal
+        if diff == "Hard" and is_tom:
+            voice_id = "TOMS_HARD"  # tambores Y/B/G juntos (preserva viradas)
+        elif n.lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and n.is_cymbal:
+            voice_id = f"cym{n.lane}"
+        else:
+            voice_id = f"L{n.lane}"
+        voices[voice_id].append(n)
 
-        lane_notes.sort(key=lambda n: n.tick)
+    out: List[DrumNote] = []
+    for voice_id, voice_notes in voices.items():
+        is_toms_hard = voice_id == "TOMS_HARD"
+        if diff == "Easy":
+            min_gap = tpb            # 1/4
+        elif diff == "Medium":
+            min_gap = tpb // 2       # 1/8
+        else:  # Hard
+            min_gap = tpb // 4 if is_toms_hard else tpb // 2  # toms 1/16; resto 1/8
+
+        voice_notes.sort(key=lambda n: n.tick)
         i = 0
-        while i < len(lane_notes):
-            cluster = [lane_notes[i]]
-            while i + 1 < len(lane_notes) and lane_notes[i+1].tick - cluster[-1].tick <= sixteenth:
-                cluster.append(lane_notes[i+1])
+        while i < len(voice_notes):
+            cluster = [voice_notes[i]]
+            while i + 1 < len(voice_notes) and voice_notes[i+1].tick - cluster[-1].tick <= sixteenth:
+                cluster.append(voice_notes[i+1])
                 i += 1
             if len(cluster) == 1:
                 out.append(cluster[0])
