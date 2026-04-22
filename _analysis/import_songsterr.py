@@ -247,7 +247,7 @@ def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
 
 
 def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
-                      target_tpb: int) -> mido.MidiTrack:
+                      target_tpb: int, drop_before_src_beat: float = 0.0) -> mido.MidiTrack:
     """Converte notas de bateria (canal 9) do src para o domínio de ticks do
     target. Trabalha em BEATS: cada nota em beat B_src → beat (B_src + offset)
     no target → tick = (B_src + offset) * target_tpb.
@@ -291,6 +291,7 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         abs_src += msg.time
         if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
             src_beat = abs_src / src_tpb
+            if src_beat < drop_before_src_beat: continue  # remove count-in
             tgt_beat = src_beat + beat_offset
             if tgt_beat < 0: continue
             rb = GM_TO_RB.get(msg.note)
@@ -364,7 +365,9 @@ def main():
     print(f"Início musical — ref: beat {ref_start:.2f}  src: beat {src_start:.2f}")
     print(f"Alinhamento: beat_ref = beat_src + {beat_offset:+.3f}")
 
-    new_drums = build_drums_track(src, beat_offset, ref.ticks_per_beat)
+    # Remove contagem de baqueta: tudo que vier antes do src_start musical
+    new_drums = build_drums_track(src, beat_offset, ref.ticks_per_beat,
+                                  drop_before_src_beat=src_start)
     print(f"PART DRUMS gerado: {sum(1 for m in new_drums if m.type=='note_on' and m.velocity>0)} eventos")
 
     # Monta saída: clona a ref, substitui PART DRUMS
