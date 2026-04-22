@@ -168,7 +168,7 @@ def write_reduced_midi(input_mid_path: str, output_mid_path: str,
     return info
 
 
-def diff_midi_parts(orig_path: str, gen_path: str) -> dict:
+def diff_midi(orig_path: str, gen_path: str) -> dict:
     """Compara notes.gen vs original em PART GUITAR e PART DRUMS."""
     orig = mido.MidiFile(orig_path); gen = mido.MidiFile(gen_path)
     out = {"guitar": {}, "drums": {}}
@@ -190,33 +190,14 @@ def diff_midi_parts(orig_path: str, gen_path: str) -> dict:
     return out
 
 
-def diff_midi(orig_path: str, gen_path: str) -> dict:
-    """Compatibilidade: retorna só guitar (forma antiga)."""
-    orig = mido.MidiFile(orig_path); gen = mido.MidiFile(gen_path)
-    a = parse_part(orig, "PART GUITAR")
-    b = parse_part(gen, "PART GUITAR")
-    out = {}
-    for d in ("Easy","Medium","Hard","Expert"):
-        ao = {n.tick for n in a[d].notes}
-        bo = {n.tick for n in b[d].notes}
-        inter = ao & bo
-        out[d] = dict(
-            orig_notes=len(ao), gen_notes=len(bo),
-            common_ticks=len(inter),
-            recall=len(inter)/max(len(ao),1),
-            precision=len(inter)/max(len(bo),1),
-        )
-    return out
-
-
 if __name__ == "__main__":
-    import glob, json
+    import glob
     base = "/Users/gabrielcarvalho/Downloads/system"
     for f in sorted(glob.glob(f"{base}/System*")):
         in_p  = os.path.join(f, "notes.mid")
         out_p = os.path.join(f, "notes.gen.mid")
-        info = write_reduced_midi(in_p, out_p)
-        diff = diff_midi_parts(in_p, out_p)
+        write_reduced_midi(in_p, out_p)
+        diff = diff_midi(in_p, out_p)
         name = os.path.basename(f).replace("System of a Down - ","").replace(" (Harmonix)","")
         print(f"\n=== {name} ===  saída: {os.path.basename(out_p)}")
         for part in ("guitar","drums"):
