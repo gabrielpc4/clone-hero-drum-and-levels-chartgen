@@ -46,6 +46,7 @@ GM_TO_RB: Dict[int, Tuple[int, bool]] = {
 }
 
 TOM_PITCHES = (41, 43, 45, 47, 48, 50)
+SNARE_GHOST_VELOCITY_MAX = 60
 SYNC_PRIMARY_HINTS = ("guitar", "ibanez", "gibson", "iceman", "strat", "tele", "fender", "lead", "rhythm")
 SYNC_SECONDARY_HINTS = ("bass", "thunderbird")
 SYNC_EXCLUDED_HINTS = ("drum", "perc", "vocal", "voice", "keys", "keyboard", "piano", "strings", "tempo", "conductor", "event")
@@ -188,6 +189,18 @@ def classify_open_hat_mode(drum_track) -> bool:
         return False
 
     return (open_count / total_count) >= 0.70
+
+
+def is_ghost_snare(pitch_value: int, velocity_value: int, lane_value: Optional[int]) -> bool:
+    # Songsterr exporta ghost snare entre parenteses com velocity bem menor
+    # que a caixa normal. Ignoramos isso para nao gerar hits extras no CH.
+    if lane_value != LANE_SNARE:
+        return False
+
+    if pitch_value not in (37, 38, 39, 40):
+        return False
+
+    return velocity_value <= SNARE_GHOST_VELOCITY_MAX
 
 
 def _track_name(track: mido.MidiTrack) -> str:
@@ -1180,6 +1193,7 @@ def build_drums_track(
     last_note_by_lane: Dict[Tuple[int, bool], int] = {}
     skipped_flams = set()
     snare_flam_second_to_first: Dict[Tuple[int, int], int] = {}
+    dropped_ghost_snares = 0
     absolute_source_tick = 0
 
     for message in drum_track:
@@ -1197,6 +1211,10 @@ def build_drums_track(
         lane_value, is_cymbal = resolve_lane(message.note)
 
         if lane_value is None:
+            continue
+
+        if is_ghost_snare(message.note, message.velocity, lane_value):
+            dropped_ghost_snares += 1
             continue
 
         lane_key = (lane_value, is_cymbal)
@@ -1247,6 +1265,9 @@ def build_drums_track(
         if lane_value is None:
             continue
 
+        if is_ghost_snare(message.note, message.velocity, lane_value):
+            continue
+
         if flam_first_tick is not None:
             lane_value = LANE_YELLOW
             is_cymbal = False
@@ -1260,6 +1281,9 @@ def build_drums_track(
 
     unique_events = []
     seen_events = set()
+
+    if dropped_ghost_snares > 0:
+        print(f"  Ghost snares ignoradas: {dropped_ghost_snares}")
 
     for event_value in sorted(mapped_events):
         event_key = (event_value[0], event_value[2])
