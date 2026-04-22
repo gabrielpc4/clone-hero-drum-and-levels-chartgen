@@ -404,8 +404,7 @@ def _guitar_duration_sec(mid: mido.MidiFile, tempo_map, tracks_filter=None) -> T
 def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                       target_tpb: int, drop_before_src_beat: float = 0.0,
                       ref_tempo_map=None, time_scale: float = 1.0,
-                      sync_mode: str = "auto",
-                      dedup_beats: float = 1/16) -> mido.MidiTrack:
+                      sync_mode: str = "auto") -> mido.MidiTrack:
     """Converte notas de bateria (canal 9) do src para o domínio de ticks do
     target. Trabalha em BEATS: cada nota em beat B_src → beat (B_src + offset)
     no target → tick = (B_src + offset) * target_tpb.
@@ -452,28 +451,6 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         except Exception:
             sync_mode = "beat"
 
-    # Dedup de "flams" — pares de notas na MESMA lane+is_cymbal com gap ≤
-    # dedup_beats. Default 1/16 beat pega flams comuns do Songsterr (≈ 30ms).
-    # O segundo ataque é descartado.
-    dedup_gap_ticks = int(round(src_tpb * dedup_beats))
-    last_tick_by_lane: Dict[Tuple[int, bool], int] = {}
-    dedup_skipped: set = set()
-    abs_src = 0
-    for msg in drum_track:
-        abs_src += msg.time
-        if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-            rb = GM_TO_RB.get(msg.note)
-            if rb is None: continue
-            lane_raw, is_cym_raw = rb
-            if msg.note == 46:
-                lane_raw, is_cym_raw = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
-            key = (lane_raw, is_cym_raw)
-            last = last_tick_by_lane.get(key)
-            if last is not None and abs_src - last <= dedup_gap_ticks:
-                dedup_skipped.add(abs_src)
-            else:
-                last_tick_by_lane[key] = abs_src
-
     abs_src = 0
     events_abs = []
     if sync_mode == "sec":
@@ -484,7 +461,6 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         for msg in drum_track:
             abs_src += msg.time
             if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-                if abs_src in dedup_skipped: continue
                 if abs_src / src_tpb < drop_before_src_beat: continue
                 src_sec = tick_to_seconds(abs_src, src_tm)
                 target_sec = anchor_ref_sec + time_scale * (src_sec - anchor_src_sec)
@@ -500,7 +476,6 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         for msg in drum_track:
             abs_src += msg.time
             if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-                if abs_src in dedup_skipped: continue
                 src_beat = abs_src / src_tpb
                 if src_beat < drop_before_src_beat: continue
                 tgt_beat = src_beat + beat_offset
@@ -573,8 +548,6 @@ def main():
                     help="auto (default): beat-mode se BPMs batem, sec-mode caso contrário. "
                          "beat: preserva posição em beats musicais. "
                          "sec: preserva posição em segundos (bom quando tempo map do src é correto).")
-    ap.add_argument("--dedup-beats", type=float, default=1/16,
-                    help="pares mesma-lane com gap ≤ N beats viram 1 nota (flams). Default 1/16.")
     args = ap.parse_args()
 
     src = mido.MidiFile(args.src_mid)
@@ -599,8 +572,7 @@ def main():
     new_drums = build_drums_track(src, beat_offset, ref.ticks_per_beat,
                                   drop_before_src_beat=drop_beat,
                                   ref_tempo_map=ref_tm, time_scale=time_scale,
-                                  sync_mode=args.sync_mode,
-                                  dedup_beats=args.dedup_beats)
+                                  sync_mode=args.sync_mode)
 
     # Diagnóstico: beats/seg da primeira drum gerada (usuário pode checar no Moonscraper)
     ref_tm = _tempo_map(ref.tracks[0], ref.ticks_per_beat)
