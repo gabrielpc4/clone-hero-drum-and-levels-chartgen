@@ -6,6 +6,9 @@
 *.flac
 *.m4a
 
+# Arquivos zip de custom songs (pesados, ficam fora do Git)
+*.zip
+
 # macOS
 .DS_Store
 ._*
