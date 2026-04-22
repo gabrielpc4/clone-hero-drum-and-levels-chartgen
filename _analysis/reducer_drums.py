@@ -189,22 +189,17 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
 
 
 def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[DrumNote]:
-    """Bane qualquer par de notas mesma-lane (e mesmo cymbal flag) com gap ≤ 1/16 nota.
-       Apenas Expert tolera 16ths consecutivos.
+    """Bane qualquer par de notas mesma-lane (e mesmo cymbal flag) com gap ≤ 1/16 nota,
+       inclusive em snare e kick. Apenas Expert tolera 16ths consecutivos.
          Hard:   mantém sub0 + sub2 (= colcheias) entre as notas do cluster.
          Medium: mantém apenas sub0 (= semínimas).
-         Easy:   mantém apenas sub0 (= semínimas, igual Medium).
-       Snare e kick não passam por aqui (são groove fundamental — D-R2/D-R3)."""
+         Easy:   mantém apenas sub0 (= semínimas, igual Medium)."""
     if not notes: return notes
     by_lane: Dict[Tuple[int, bool], List[DrumNote]] = defaultdict(list)
-    others: List[DrumNote] = []
     for n in notes:
-        if n.lane in (LANE_KICK, LANE_SNARE):
-            others.append(n)
-        else:
-            by_lane[(n.lane, n.is_cymbal)].append(n)
+        by_lane[(n.lane, n.is_cymbal)].append(n)
 
-    out: List[DrumNote] = list(others)
+    out: List[DrumNote] = []
     sixteenth = tpb // 4  # 120 ticks @ tpb=480
     for (lane, is_cym), lane_notes in by_lane.items():
         lane_notes.sort(key=lambda n: n.tick)
