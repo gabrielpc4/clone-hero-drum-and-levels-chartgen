@@ -233,21 +233,14 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
             # toms, kick e snare → 1/16; só pratos ficam limitados a 1/8
             min_gap = tpb // 4 if (is_toms_hard or is_kick_hard or is_snare_hard) else tpb // 2
 
+        # Greedy temporal direto: percorre as notas em ordem e mantém só as
+        # que estão a ≥ min_gap da última mantida. Garante a regra mesmo para
+        # gaps off-grid (ex.: 180 ticks entre 1/16 e 1/8).
         voice_notes.sort(key=lambda n: n.tick)
-        i = 0
-        while i < len(voice_notes):
-            cluster = [voice_notes[i]]
-            while i + 1 < len(voice_notes) and voice_notes[i+1].tick - cluster[-1].tick <= sixteenth:
-                cluster.append(voice_notes[i+1])
-                i += 1
-            if len(cluster) == 1:
-                out.append(cluster[0])
-            else:
-                last_tick = None
-                for n in cluster:
-                    if last_tick is None or n.tick - last_tick >= min_gap:
-                        out.append(n); last_tick = n.tick
-            i += 1
+        last_tick = None
+        for n in voice_notes:
+            if last_tick is None or n.tick - last_tick >= min_gap:
+                out.append(n); last_tick = n.tick
     out.sort(key=lambda n: (n.tick, n.lane))
     return out
 
