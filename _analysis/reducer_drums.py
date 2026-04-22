@@ -191,12 +191,13 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
 def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[DrumNote]:
     """Bane notas mesma-lane (e mesmo cymbal flag) com gap absoluto ≤ 1/16 nota,
        inclusive em snare e kick. Apenas Expert tolera notas tão próximas.
-         Hard:   espaçamento mínimo entre notas mantidas = 1/8 (= colcheia).
-         Medium: idem (1/8).
-         Easy:   espaçamento mínimo = 1/4 (= semínima).
-       Implementação greedy temporal: percorre o cluster e mantém apenas notas
-       cujo tick fica ≥ min_gap após a última nota mantida. Robusto a notas
-       off-grid (32nds humanizadas etc.)."""
+
+       Espaçamento mínimo entre notas mantidas (greedy temporal):
+         Hard:   1/8 (colcheia) para snare/kick/pratos; 1/16 (= dobro da freq) para TAMBORES Y/B/G
+         Medium: 1/8 para todos
+         Easy:   1/4 (semínima) para todos
+
+       Robusto a notas off-grid (32nds humanizadas etc.)."""
     if not notes: return notes
     by_lane: Dict[Tuple[int, bool], List[DrumNote]] = defaultdict(list)
     for n in notes:
@@ -204,9 +205,16 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
 
     out: List[DrumNote] = []
     sixteenth = tpb // 4  # 120 ticks @ tpb=480
-    min_gap = tpb // 2 if diff in ("Hard", "Medium") else tpb  # 240 ou 480
 
     for (lane, is_cym), lane_notes in by_lane.items():
+        is_tom = lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and not is_cym
+        if diff == "Easy":
+            min_gap = tpb           # 1/4
+        elif diff == "Medium":
+            min_gap = tpb // 2      # 1/8
+        else:  # Hard
+            min_gap = tpb // 4 if is_tom else tpb // 2   # tambores até 1/16; resto 1/8
+
         lane_notes.sort(key=lambda n: n.tick)
         i = 0
         while i < len(lane_notes):
