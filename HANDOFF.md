@@ -953,7 +953,7 @@ Após validação visual, o usuário pediu **dois desvios das regras observadas*
 Espaçamento mínimo entre notas mantidas (greedy temporal):
 - **Easy:** 1/4 (semínima) para todos.
 - **Medium:** 1/8 (colcheia) para todos.
-- **Hard:** 1/8 para snare, kick e pratos; **1/16** (= dobro da freq) para tambores Y/B/G — preferência do usuário 2026-04-22.
+- **Hard:** 1/8 para snare e pratos; **1/16** para tambores Y/B/G **e kick** — preferência do usuário 2026-04-22. Em Hard, tambores Y+B+G ainda são tratados como uma única voz (preserva viradas Y-B-G em 16ths).
 - Não afeta snare (D-R2 sagrada) nem kick (já decimado por D-R3).
 - Caso disparador: início de Hypnotize tem amarelo 16ths que o oficial mantém integral em Hard, mas o usuário considerou "muito rápido pro Hard".
 

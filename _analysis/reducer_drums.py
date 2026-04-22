@@ -222,12 +222,14 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
     out: List[DrumNote] = []
     for voice_id, voice_notes in voices.items():
         is_toms_hard = voice_id == "TOMS_HARD"
+        is_kick_hard = diff == "Hard" and voice_id == f"L{LANE_KICK}"
         if diff == "Easy":
             min_gap = tpb            # 1/4
         elif diff == "Medium":
             min_gap = tpb // 2       # 1/8
         else:  # Hard
-            min_gap = tpb // 4 if is_toms_hard else tpb // 2  # toms 1/16; resto 1/8
+            # toms e kick → 1/16 (preferência usuário); snare e pratos → 1/8
+            min_gap = tpb // 4 if (is_toms_hard or is_kick_hard) else tpb // 2
 
         voice_notes.sort(key=lambda n: n.tick)
         i = 0
