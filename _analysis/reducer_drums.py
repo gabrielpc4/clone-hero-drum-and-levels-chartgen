@@ -23,13 +23,14 @@ from parse_drums import (parse_drums, DrumNote, DrumChart, DIFF_BASE_DRUMS,
 
 
 # Densidade-alvo por lane e dificuldade — calibrada via regressão sobre as 6 músicas SOAD.
-# Para toms: ratio observado de notas-do-mesmo-lane na redução vs Expert.
+# Snare propositalmente alta (1.0 em Hard) — quem corta colcheias rápidas é o
+# filter_fast_clusters; o filtro principal não deve dropar snare por proporção.
 TOM_RATIOS = {
-    "Easy":   {LANE_KICK: 0.10, LANE_SNARE: 0.58, LANE_YELLOW: 0.38,
+    "Easy":   {LANE_KICK: 0.10, LANE_SNARE: 0.85, LANE_YELLOW: 0.38,
                LANE_BLUE: 0.74, LANE_GREEN: 0.71},
-    "Medium": {LANE_KICK: 0.30, LANE_SNARE: 0.60, LANE_YELLOW: 0.76,
+    "Medium": {LANE_KICK: 0.30, LANE_SNARE: 0.95, LANE_YELLOW: 0.76,
                LANE_BLUE: 0.72, LANE_GREEN: 0.83},
-    "Hard":   {LANE_KICK: 0.62, LANE_SNARE: 0.77, LANE_YELLOW: 0.77,
+    "Hard":   {LANE_KICK: 0.62, LANE_SNARE: 1.00, LANE_YELLOW: 0.77,
                LANE_BLUE: 0.93, LANE_GREEN: 1.00},
 }
 # Cymbals — só Hard usa (E/M = 0 cymbals).
