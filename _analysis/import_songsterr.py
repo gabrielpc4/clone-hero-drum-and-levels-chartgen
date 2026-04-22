@@ -374,8 +374,37 @@ def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
     return best
 
 
+def _sec_to_tick(sec: float, tempo_map: List[Tuple[int, float]]) -> int:
+    """Inverse de tick_to_seconds usando o mesmo mapa."""
+    if sec <= 0: return 0
+    cur_sec = 0.0
+    for (t0, spt), (t1, _) in zip(tempo_map, tempo_map[1:] + [(10**9, 0.0)]):
+        seg_sec = (t1 - t0) * spt
+        if cur_sec + seg_sec >= sec:
+            return t0 + int((sec - cur_sec) / spt) if spt > 0 else t0
+        cur_sec += seg_sec
+    return tempo_map[-1][0] + int((sec - cur_sec) / tempo_map[-1][1]) if tempo_map[-1][1] > 0 else tempo_map[-1][0]
+
+
+def _guitar_duration_sec(mid: mido.MidiFile, tempo_map, tracks_filter=None) -> Tuple[float, float]:
+    """Devolve (sec_first_note, sec_last_note) para tracks filtradas."""
+    first = None; last = None
+    for t in mid.tracks:
+        if tracks_filter and not tracks_filter(t): continue
+        abs_t = 0
+        for msg in t:
+            abs_t += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and msg.channel != 9:
+                s = tick_to_seconds(abs_t, tempo_map)
+                if first is None or s < first: first = s
+                if last is None or s > last: last = s
+    return (first or 0.0, last or 0.0)
+
+
 def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
-                      target_tpb: int, drop_before_src_beat: float = 0.0) -> mido.MidiTrack:
+                      target_tpb: int, drop_before_src_beat: float = 0.0,
+                      ref_tempo_map=None, time_scale: float = 1.0,
+                      sync_mode: str = "auto") -> mido.MidiTrack:
     """Converte notas de bateria (canal 9) do src para o domínio de ticks do
     target. Trabalha em BEATS: cada nota em beat B_src → beat (B_src + offset)
     no target → tick = (B_src + offset) * target_tpb.
@@ -405,25 +434,59 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     print(f"Hi-hat Songsterr: {n_closed} closed, {n_open} open  "
           f"→ open vai pra {'Y-cym (amarelo, dominante)' if open_mode_yellow else 'B-cym (azul, ride/accent)'}")
 
+    src_tm = _tempo_map(src_mid.tracks[0], src_tpb)
+    # Auto: escolhe "beat" se BPMs batem aproximadamente, "sec" se divergem.
+    if sync_mode == "auto":
+        def _bpm_avg(tm):
+            if len(tm) < 2: return 60.0 / (tm[0][1] * src_tpb if tm else 500000 / 1_000_000)
+            # tempo map é (tick, sec_per_tick). bpm = 60 / (sec_per_tick * tpb)
+            avgs = [60 / (spt * (src_tpb if tm is src_tm else target_tpb))
+                    for _, spt in tm]
+            return sum(avgs) / len(avgs)
+        # razão BPM — se |razão - 1| > 0.15, usa sec-mode (BPMs divergem)
+        try:
+            bpm_src = _bpm_avg(src_tm); bpm_ref = _bpm_avg(ref_tempo_map)
+            ratio = bpm_src / bpm_ref if bpm_ref > 0 else 1.0
+            sync_mode = "sec" if abs(ratio - 1.0) > 0.15 else "beat"
+        except Exception:
+            sync_mode = "beat"
+
     abs_src = 0
-    events_abs = []  # (tick_target, pitch, lane, is_cym)
-    for msg in drum_track:
-        abs_src += msg.time
-        if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
-            src_beat = abs_src / src_tpb
-            if src_beat < drop_before_src_beat: continue  # remove count-in
-            tgt_beat = src_beat + beat_offset
-            if tgt_beat < 0: continue
-            rb = GM_TO_RB.get(msg.note)
-            if rb is None: continue
-            lane, is_cym = rb
-            # Override open hi-hat (GM 46): amarelo se é modo dominante (hi-hat
-            # folgado), azul se a música tem mix de closed+open (open = ride).
-            if msg.note == 46:
-                lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
-            target_tick = int(round(tgt_beat * target_tpb))
-            pitch_expert = 96 + lane
-            events_abs.append((target_tick, pitch_expert, lane, is_cym))
+    events_abs = []
+    if sync_mode == "sec":
+        # Converte src tick → segundos → ref tick via tempo maps
+        anchor_src_sec = tick_to_seconds(int(drop_before_src_beat * src_tpb), src_tm)
+        anchor_ref_tick = int((drop_before_src_beat + beat_offset) * target_tpb)
+        anchor_ref_sec = tick_to_seconds(anchor_ref_tick, ref_tempo_map)
+        for msg in drum_track:
+            abs_src += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
+                if abs_src / src_tpb < drop_before_src_beat: continue
+                src_sec = tick_to_seconds(abs_src, src_tm)
+                target_sec = anchor_ref_sec + time_scale * (src_sec - anchor_src_sec)
+                if target_sec < 0: continue
+                rb = GM_TO_RB.get(msg.note)
+                if rb is None: continue
+                lane, is_cym = rb
+                if msg.note == 46:
+                    lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
+                target_tick = _sec_to_tick(target_sec, ref_tempo_map)
+                events_abs.append((target_tick, 96 + lane, lane, is_cym))
+    else:  # "beat" mode
+        for msg in drum_track:
+            abs_src += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
+                src_beat = abs_src / src_tpb
+                if src_beat < drop_before_src_beat: continue
+                tgt_beat = src_beat + beat_offset
+                if tgt_beat < 0: continue
+                rb = GM_TO_RB.get(msg.note)
+                if rb is None: continue
+                lane, is_cym = rb
+                if msg.note == 46:
+                    lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
+                target_tick = int(round(tgt_beat * target_tpb))
+                events_abs.append((target_tick, 96 + lane, lane, is_cym))
 
     # Remove duplicatas (mesma lane no mesmo tick) — comum em GM (crash1+crash2 simultâneos)
     seen = set()
@@ -479,6 +542,12 @@ def main():
                     help="override manual do offset em beats (ref = src + N)")
     ap.add_argument("--drop-before-src-beat", type=float, default=None,
                     help="override: dropa notas src antes deste beat")
+    ap.add_argument("--time-scale", type=float, default=1.0,
+                    help="escala temporal aplicada em sync-mode=sec (default 1.0)")
+    ap.add_argument("--sync-mode", choices=("auto", "beat", "sec"), default="auto",
+                    help="auto (default): beat-mode se BPMs batem, sec-mode caso contrário. "
+                         "beat: preserva posição em beats musicais. "
+                         "sec: preserva posição em segundos (bom quando tempo map do src é correto).")
     args = ap.parse_args()
 
     src = mido.MidiFile(args.src_mid)
@@ -486,11 +555,24 @@ def main():
 
     beat_offset, src_anchor, method = resolve_alignment(ref, src, args.offset_beats)
     drop_beat = args.drop_before_src_beat if args.drop_before_src_beat is not None else src_anchor
+    ref_tm = _tempo_map(ref.tracks[0], ref.ticks_per_beat)
+    src_tm = _tempo_map(src.tracks[0], src.ticks_per_beat)
+
+    # Escala temporal: por padrão 1.0 — os tempo maps src e ref já descrevem
+    # o áudio corretamente em segundos (mesmo que BPM/time-sig difiram na
+    # notação, a duração em segundos é consistente). Override útil só para
+    # casos onde o MIDI externo tem tempo map errado (BPM inventado).
+    time_scale = args.time_scale if args.time_scale is not None else 1.0
+    scale_src = "override" if args.time_scale is not None else "default=1.0"
+
     print(f"Alinhamento ({method}): beat_ref = beat_src + {beat_offset:+.3f}"
           f"  drop antes de src_beat {drop_beat:.2f}")
+    print(f"Escala temporal: {time_scale:.4f} [{scale_src}]")
 
     new_drums = build_drums_track(src, beat_offset, ref.ticks_per_beat,
-                                  drop_before_src_beat=drop_beat)
+                                  drop_before_src_beat=drop_beat,
+                                  ref_tempo_map=ref_tm, time_scale=time_scale,
+                                  sync_mode=args.sync_mode)
 
     # Diagnóstico: beats/seg da primeira drum gerada (usuário pode checar no Moonscraper)
     ref_tm = _tempo_map(ref.tracks[0], ref.ticks_per_beat)
