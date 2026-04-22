@@ -91,11 +91,17 @@ def find_runs(notes: List[Note], tpb: int) -> List[List[int]]:
 
 
 def score_expert_notes(expert: Chart, diff: str) -> Dict[int, float]:
-    """Atribui um score a cada nota Expert (chave = índice em sorted).
-       Score = peso por (sub-beat, duração, posição-na-run, isolamento, fret-change)."""
+    """Atribui score a cada nota Expert.
+       Componentes: sub-beat, duração, posição-na-run, isolamento, mudança de fret,
+       acorde, e (extra para Hard) "pico" local de fret no beat."""
     tpb = expert.ticks_per_beat
     notes = sorted(expert.notes, key=lambda n: n.tick)
     runs = find_runs(notes, tpb)
+    # Indexa por beat para detecção de pico
+    by_beat: Dict[int, List[int]] = defaultdict(list)
+    for i, n in enumerate(notes):
+        by_beat[n.tick // tpb].append(i)
+
     scores: Dict[int, float] = {}
     for run in runs:
         run_size = len(run)
@@ -106,19 +112,18 @@ def score_expert_notes(expert: Chart, diff: str) -> Dict[int, float]:
             # 1) Sub-beat base (R5) — sub1/sub3 vale mais em Hard (preserva 16ths)
             if sub == 0:   s = 100
             elif sub == 2: s = 60
-            elif diff == "Hard": s = 35   # 16ths fracos em Hard ainda contam
+            elif diff == "Hard": s = 35
             else:          s = 5
 
-            # 2) Duração — sustains longos são SAGRADOS (sobescrevem sub-beat)
-            if   n.duration >= 2*tpb: s += 120  # ≥ 2 beats: dominante
-            elif n.duration >= tpb:   s += 80   # ≥ 1 beat
-            elif n.duration >= tpb//2: s += 40  # ≥ 1/2 beat
+            # 2) Duração — sustains longos sobrescrevem sub-beat
+            if   n.duration >= 2*tpb: s += 120
+            elif n.duration >= tpb:   s += 80
+            elif n.duration >= tpb//2: s += 40
             elif n.duration >= tpb//4: s += 10
 
             # 3) Posição na run (bordas) (R9)
             if run_size > 1:
                 if pos_in_run == 0 or pos_in_run == run_size - 1: s += 18
-                # Penalidade para meio de run rápida em Easy/Medium
                 if diff in ("Easy", "Medium") and 0 < pos_in_run < run_size-1 and sub in (1, 3):
                     s -= 30
 
@@ -128,12 +133,23 @@ def score_expert_notes(expert: Chart, diff: str) -> Dict[int, float]:
             if gap_prev > tpb and gap_next > tpb:
                 s += 30
 
-            # 5) Mudança de fret-set vs anterior — uma "voz nova" é mais importante que repetição
+            # 5) Mudança de fret-set vs anterior
             if gi == 0 or notes[gi-1].frets != n.frets:
                 s += 8
 
-            # 6) Bonus pequeno para acorde
+            # 6) Bonus para acorde
             if len(n.frets) >= 2: s += 8
+
+            # 7) NOVO (Hard/Medium): "pico de fret" no beat — nota cujo fret é
+            # mais agudo (B/O) entre as notas do mesmo beat ganha bonus.
+            # Em riffs tipo Aerials (escalar tremolo), a Harmonix preserva os
+            # picos das fundamentais.
+            if diff in ("Hard", "Medium") and n.frets:
+                same_beat = by_beat[n.tick // tpb]
+                if len(same_beat) >= 3:
+                    max_fret_in_beat = max(max(notes[j].frets) for j in same_beat if notes[j].frets)
+                    if max(n.frets) == max_fret_in_beat:
+                        s += 25 if diff == "Hard" else 15
 
             scores[gi] = s
     return scores

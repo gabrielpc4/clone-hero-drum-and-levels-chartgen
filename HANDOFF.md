@@ -431,6 +431,7 @@ Padrão observado em runs de tamanho `n`:
 | ~~R1~~ | ~~Easy = sem acordes (todo acorde Expert vira ≤1 nota ou some)~~ → ver R17 | **refutada** |
 | R2 | Medium/Hard = ≤2 notas por acorde | **Lei** |
 | R17 | Easy aceita acordes ≤2 notas (GRY, spread ≤ 2) **se** a música está em "modo power-chord" (≥50% acordes pwr-spread≤2 e gap mediano ≥ 100 ticks) | Forte |
+| R18 | Em Hard/Medium, dentro de um beat denso (≥3 notas), a nota com **fret mais agudo** ganha bonus de score (preserva picos de tremolo) | Heurística |
 | R3 | Easy usa essencialmente {G,R,Y}; B/O só em sustain longo solitário | Forte |
 | R4 | Medium usa {G,R,Y,B}; O é exceção isolada | Forte |
 | R5 | Densidade: sub0 ≫ sub2 ≫ sub1/sub3 (Easy quase só on-beat) | **Lei** |
@@ -644,7 +645,13 @@ Open strum = nenhum botão de fret pressionado; representado como `frets=()` no 
   - **R16 implementada**: modo "agressivo" → sustains < 1 beat viram hits sem cauda em E/M.
   - **Writer MIDI** (`midi_writer.py`): gera `notes.gen.mid` em cada pasta, preservando todas as faixas originais e o Expert intacto. **Validado: Expert preservado 100% nas 6 músicas.**
   - **Resultados finais F1:** Hard **0.85**, Medium **0.79**, Easy **0.74**.
-  - Próximo passo prático: jogar os `notes.gen.mid` no Clone Hero para validação subjetiva (F1 alto não garante "feel" correto).
+- **2026-04-22 (6)** — Validação subjetiva pelo usuário no Moonscraper: **Hypnotize Hard+Medium "perfeito"**. **Aerials "nada a ver"**. Iteração para subir Aerials revelou:
+  - Aerials Expert é **tremolo escalar circular de 4 notas/beat** (G→B→O→Y/B→O→G→B...) — 171 dos 295 beats têm 4 notas consecutivas em 16ths.
+  - Aerials Hard oficial preserva ~2.27 notas/beat (mistura de 1, 2, 3 notas) com **5 padrões diferentes** de retenção (sub0+sub2 dominante, mas com variantes para preservar transições musicais).
+  - Aerials Medium oficial é **motivo melódico extremamente específico** (1 nota por beat, escolhida pela melodia, não pelo sub-beat). F1 difícil de melhorar via score function genérica.
+  - Tentadas: alocação Bresenham (piorou Hypnotize), regra forçada sub0+sub2 (não mudou), target_ratio local por janela (piorou outras), peak-fret bonus (pequena melhora geral).
+  - **Conclusão:** Aerials é caso "sem padrão estatístico" — para subir além do platô requer features de **detecção de motivo melódico/repetição** ou modelo treinado nota a nota. Adicionado **R18** (peak-fret bonus em Hard/Medium): score +25/+15 para nota cujo fret é máximo dentro do beat (preserva picos do tremolo).
+  - **F1 final pós-iteração:** Hard 0.85, Medium 0.79, Easy 0.74 (mesmo platô; melhoria pequena de fret_exact em Hard).
 
 ---
 
