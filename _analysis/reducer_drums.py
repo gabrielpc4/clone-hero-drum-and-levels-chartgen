@@ -175,10 +175,10 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
     # Sort final
     kept_notes.sort(key=lambda n: (n.tick, n.lane))
 
-    # Filtro anti-rápido em Hard/Medium (preferência do usuário 2026-04-22):
-    # sequências em 16ths consecutivos (gap < 1/4 nota = tpb//4) cansam o jogador,
-    # então afinamos para colcheias (Hard) ou semínimas (Medium).
-    if target_diff in ("Hard", "Medium"):
+    # Filtro anti-16ths-consecutivos em E/M/H (preferência do usuário 2026-04-22):
+    # qualquer par de notas mesma-lane com gap ≤ 1/16 nota é considerado "rápido demais"
+    # para Easy/Medium/Hard — só Expert tolera 16ths consecutivos.
+    if target_diff in ("Easy", "Medium", "Hard"):
         kept_notes = filter_fast_clusters(kept_notes, tpb, target_diff)
 
     return DrumChart(
@@ -189,9 +189,12 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
 
 
 def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[DrumNote]:
-    """Em sequências de 16ths (gap ≤ tpb//4) por LANE+CYMBAL, decimar os fracos.
-       Hard: mantém sub0 + sub2 (colcheias). Medium: mantém só sub0 (semínimas).
-       Não toca em snare (sagrada por D-R2) nem em kick (já decimado por D-R3)."""
+    """Bane qualquer par de notas mesma-lane (e mesmo cymbal flag) com gap ≤ 1/16 nota.
+       Apenas Expert tolera 16ths consecutivos.
+         Hard:   mantém sub0 + sub2 (= colcheias) entre as notas do cluster.
+         Medium: mantém apenas sub0 (= semínimas).
+         Easy:   mantém apenas sub0 (= semínimas, igual Medium).
+       Snare e kick não passam por aqui (são groove fundamental — D-R2/D-R3)."""
     if not notes: return notes
     by_lane: Dict[Tuple[int, bool], List[DrumNote]] = defaultdict(list)
     others: List[DrumNote] = []
@@ -211,15 +214,15 @@ def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[Dru
             while i + 1 < len(lane_notes) and lane_notes[i+1].tick - cluster[-1].tick <= sixteenth:
                 cluster.append(lane_notes[i+1])
                 i += 1
-            if len(cluster) <= 2:
-                out.extend(cluster)
+            if len(cluster) == 1:
+                out.append(cluster[0])
             else:
-                # Cluster rápido (≥3 notas em 16ths): manter apenas sub-beats fortes
+                # Cluster ≥2 notas em 16ths consecutivos — decima conforme nível
                 for n in cluster:
                     sub = (n.tick % tpb) // (tpb // 4)
                     if diff == "Hard" and sub in (0, 2):
                         out.append(n)
-                    elif diff == "Medium" and sub == 0:
+                    elif diff in ("Medium", "Easy") and sub == 0:
                         out.append(n)
             i += 1
     out.sort(key=lambda n: (n.tick, n.lane))

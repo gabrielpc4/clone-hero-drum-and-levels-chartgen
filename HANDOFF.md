@@ -948,10 +948,10 @@ Após validação visual, o usuário pediu **dois desvios das regras observadas*
 - O usuário prefere que cymbal Expert **continue cymbal em E/M**, com a mesma frequência da regra atual (target_lane * 0.7 dos cymbals Expert).
 - Implicação: o jogador em Pro Drums mode verá pratos em E/M (depende do CH suportar — o marker 110/111/112 já é preservado pelo writer).
 
-**Override 2: Anti-clusters-rápidos em Hard/Medium**
-- Sequências de notas mesma lane com gap ≤ 1/16 nota (=tpb/4) que durem ≥ 3 notas são consideradas "rápidas demais" para Hard/Medium.
-- **Hard:** mantém apenas sub0 (on-beat) e sub2 (& do beat) → vira colcheias.
-- **Medium:** mantém apenas sub0 → vira semínimas.
+**Override 2: Anti-16ths-consecutivos em Easy/Medium/Hard**
+- Qualquer **par** de notas mesma lane com gap ≤ 1/16 nota (=tpb/4) é considerado "rápido demais" para E/M/H — só Expert tolera 16ths consecutivos.
+- **Hard:** mantém sub0 + sub2 (= colcheias).
+- **Medium e Easy:** mantém só sub0 (= semínimas).
 - Não afeta snare (D-R2 sagrada) nem kick (já decimado por D-R3).
 - Caso disparador: início de Hypnotize tem amarelo 16ths que o oficial mantém integral em Hard, mas o usuário considerou "muito rápido pro Hard".
 
