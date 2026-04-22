@@ -10,9 +10,9 @@
 
 O usuário tem charts oficiais da Harmonix (origem Rock Band) das músicas do System of a Down convertidas para Clone Hero. Cada música tem **Easy / Medium / Hard / Expert** já feitos para guitarra, baixo, bateria e vocal.
 
-A meta final é **ensinar uma LLM a, dada apenas a chart Expert da guitarra de uma música nova, gerar Easy / Medium / Hard com qualidade equivalente à oficial da Harmonix.**
+A meta final é **ensinar uma LLM a, dada apenas a chart Expert (de guitarra ou bateria), gerar Easy / Medium / Hard com qualidade equivalente à oficial da Harmonix.** Em paralelo, **gerar charts de bateria a partir de MIDIs do Guitar Pro** (track de bateria multi-track exportada para MIDI) — esta é a frente futura.
 
-Foco atual: **somente guitarra** (`PART GUITAR`). Bateria/baixo/vocal ficam para depois.
+Foco atual: **GUITARRA concluída (gerador v4 funcional)**. **BATERIA em estudo** — análise estrutural concluída (ver §13), construção do reducer de drums pendente.
 
 Estratégia:
 1. **Etapa 1 — Validação estrutural** ✅ (concluída): confirmar como o `notes.mid` representa cada faixa/dificuldade.
@@ -652,6 +652,13 @@ Open strum = nenhum botão de fret pressionado; representado como `frets=()` no 
   - Tentadas: alocação Bresenham (piorou Hypnotize), regra forçada sub0+sub2 (não mudou), target_ratio local por janela (piorou outras), peak-fret bonus (pequena melhora geral).
   - **Conclusão:** Aerials é caso "sem padrão estatístico" — para subir além do platô requer features de **detecção de motivo melódico/repetição** ou modelo treinado nota a nota. Adicionado **R18** (peak-fret bonus em Hard/Medium): score +25/+15 para nota cujo fret é máximo dentro do beat (preserva picos do tremolo).
   - **F1 final pós-iteração:** Hard 0.85, Medium 0.79, Easy 0.74 (mesmo platô; melhoria pequena de fret_exact em Hard).
+- **2026-04-22 (7)** — Início do estudo de **PART DRUMS** (bateria). Criado `_analysis/parse_drums.py`. Documentada nova **§14** com:
+  - Mapa de pitches por dificuldade (60-64, 72-76, 84-88, 96-100) + 2x kick (95).
+  - **Pro Drums** explicado: pitches 110/111/112 são phrase-markers que convertem Y/B/G em prato (cymbal) durante o intervalo. Só afeta Hard/Expert.
+  - Convenção musical confirmada com usuário: Vermelho=caixa, Y-tom=tom 1, Y-cym=chimbal, B-tom=tom 2, B-cym=ride/hi-hat aberto, G-tom=surdo, G-cym=crash.
+  - **Drums preserva muito mais que guitarra** em todas as dificuldades (média E=0.38, M=0.55, H=0.76 vs guitarra E=0.23, M=0.38, H=0.64) — porque "simplificar bateria" é tirar pratos/fundir tons, não dropar gem-events.
+  - Regras observadas D-R1 a D-R7 documentadas (D-R1 lei: Easy/Medium = 0 cymbals; D-R2 lei: Snare sagrada; D-R3 forte: kick fortemente decimado em Easy, alguns só 2-7%).
+  - Próximo passo: alinhamento drums Expert↔reduções para validar D-R3 a D-R7 e construir `reducer_drums.py`.
 
 ---
 
@@ -664,3 +671,144 @@ Open strum = nenhum botão de fret pressionado; representado como `frets=()` no 
 | H1 (densidade fixa por dificuldade) | **refinada** | A variação por música é grande (Easy/X varia de 16% Hypnotize a 29% Spiders). Target médio (~22/38/65%) ainda é a melhor base. |
 | H2 (sustains longos preservados) | **confirmada como R11/R16** | Limiar prático: sustain ≥ 1 beat sempre preservado; 1/8-1 beat depende do "modo da música". |
 | H4 (anchor é consequência) | **confirmada** | Mean repeat varia 1.2-3.7 sem padrão consistente E/M/H. |
+
+---
+
+## 14. PART DRUMS — análise estrutural
+
+Documenta tudo sobre a chart de bateria. Análise focada em **descrever** o formato e padrões observados nas 6 músicas SOAD; **construção do reducer de drums fica para a próxima etapa**.
+
+### 14.1 Mapa de pitches (PART DRUMS)
+
+| Dificuldade | Kick | Snare (R) | Yellow (Y) | Blue (B) | Green (G) |
+|---|---|---|---|---|---|
+| Easy   | 60 | 61 | 62 | 63 | 64 |
+| Medium | 72 | 73 | 74 | 75 | 76 |
+| Hard   | 84 | 85 | 86 | 87 | 88 |
+| Expert | 96 | 97 | 98 | 99 | 100 |
+
+**Pitch 95 = 2x bass pedal (Expert+)** — kick adicional para "double bass" mode (visto em BYOB com 99 ocorrências).
+
+**Marcadores compartilhados pela faixa:**
+
+| Pitch | Função |
+|---|---|
+| 110 | **Yellow Cymbal flag** (Pro Drums): durante este intervalo, qualquer nota Yellow Hard/Expert é **prato amarelo (chimbal)** ao invés de tom |
+| 111 | **Blue Cymbal flag**: durante este intervalo, Blue = prato azul (ride/hi-hat aberto) |
+| 112 | **Green Cymbal flag**: durante este intervalo, Green = prato verde (crash) |
+| 105/106 | Player 1/Player 2 markers (RB1) |
+| 116 | Overdrive / Star Power |
+| 120-124 | Drum fill / BRE — 5 pitches simultâneos = 1 drum fill |
+| 24-51 | Animações (kick foot, sticks, hands) — IGNORAR para chart |
+| 12, 14 | Trainer/practice markers |
+
+**Velocity:** todas as notas dessas charts SOAD usam `vel=100`. RB3+ usa vel=127 (accent) e vel=1-50 (ghost) — **não aparece nas SOAD**. Provavelmente charts de era pré-RB3.
+
+**Text events em PART DRUMS:**
+- `[mix N drumsK...]` — sincroniza qual stem de áudio toca (auto-mix). N = dificuldade (0-3 = E/M/H/X), K = configuração (`drums3`, `drums3easy`, `drums3easynokick`...). Não afeta chart de notas.
+- `[idle]`, `[intense]`, `[play]` — drummer animation cues. Ignorar.
+
+### 14.2 Pro Drums — diferenciação tom/cymbal
+
+**Como funciona:** os pitches 110, 111, 112 são "phrase markers" — quando ON, **todas as notas Yellow/Blue/Green** que acontecem dentro daquele intervalo (em Hard/Expert) são interpretadas como **prato** ao invés de **tom**. Quando OFF, são tom.
+
+**Convenção musical** (cortesia do usuário):
+- **Vermelho** (61/73/85/97) = caixa
+- **Yellow tambor** = tom 1 (high tom)
+- **Yellow prato** = chimbal (hi-hat fechado normalmente)
+- **Blue tambor** = tom 2 (mid tom)
+- **Blue prato** = ride; **às vezes representa hi-hat aberto** quando o resto está em fechado; raramente prato de ataque
+- **Green tambor** = surdo (floor tom)
+- **Green prato** = crash; pode aparecer em sequência (vários crashes seguidos)
+- **Pedal** (60/72/84/96) = bumbo
+
+**Importante:** Pro Drums só existe em **Hard e Expert**. Em **Easy/Medium**, todas as Y/B/G são **lane (sem distinção tom/cymbal)** — visualmente mostradas como tambor. **Nas 6 músicas SOAD: 0 cymbals em Easy e 0 em Medium**.
+
+### 14.3 Estatísticas brutas (geradas por `_analysis/parse_drums.py`)
+
+```
+Aerials
+  Easy   total= 445  {Snare:124, Kick:58,  Y-tom:29,  B-tom:189, G-tom:45}
+  Medium total= 769  {Snare:124, Kick:129, Y-tom:271, B-tom:198, G-tom:47}
+  Hard   total= 949  {Snare:151, Kick:229, Y-tom:243, Y-cym:45, B-tom:209, B-cym:17, G-tom:51, G-cym:4}
+  Expert total=1195  {Snare:170, Kick:276, Y-tom:415, Y-cym:47, B-tom:210, B-cym:18, G-tom:51, G-cym:8}
+
+B.Y.O.B.
+  Easy   total= 707  {Snare:279, Kick:18,  Y-tom:292, B-tom:6,   G-tom:112}
+  Medium total= 958  {Snare:283, Kick:161, Y-tom:386, B-tom:6,   G-tom:122}
+  Hard   total=1637  {Snare:310, Kick:402, Y-tom:557, Y-cym:20, B-tom:143, B-cym:7, G-tom:198}
+  Expert total=2324  {Snare:431, Kick:823, Y-tom:690, Y-cym:25, B-tom:165, B-cym:14, G-tom:176}
+
+Chop Suey
+  Easy   total= 661  {Snare:125, Kick:25,  Y-tom:129, B-tom:338, G-tom:44}
+  Medium total= 821  {Snare:129, Kick:119, Y-tom:162, B-tom:341, G-tom:70}
+  Hard   total=1094  {Snare:161, Kick:220, Y-tom:229, Y-cym:30, B-tom:347, B-cym:30, G-tom:63, G-cym:14}
+  Expert total=1295  {Snare:163, Kick:335, Y-tom:274, Y-cym:46, B-tom:348, B-cym:52, G-tom:63, G-cym:14}
+
+Hypnotize
+  Easy   total= 443  {Snare:75,  Kick:44,  Y-tom:140, B-tom:132, G-tom:52}
+  Medium total= 627  {Snare:75,  Kick:104, Y-tom:308, B-tom:84,  G-tom:56}
+  Hard   total= 888  {Snare:80,  Kick:182, Y-tom:325, Y-cym:109, B-cym:125, G-tom:67}
+  Expert total=1502  {Snare:84,  Kick:313, Y-tom:538, Y-cym:113, B-tom:4, B-cym:314, G-tom:87, G-cym:49}
+
+Spiders
+  Easy   total= 396  {Snare:106, Kick:14,  Y-tom:219, B-tom:1,   G-tom:56}
+  Medium total= 534  {Snare:106, Kick:90,  Y-tom:281, B-tom:1,   G-tom:56}
+  Hard   total= 706  {Snare:170, Kick:183, Y-tom:280, Y-cym:1, B-cym:1, G-tom:71}
+  Expert total= 883  {Snare:265, Kick:256, Y-tom:273, Y-cym:2, B-tom:32, B-cym:1, G-tom:54}
+
+Toxicity
+  Easy   total= 552  {Snare:198, Kick:90,  Y-tom:138, B-tom:18,  G-tom:108}
+  Medium total= 968  {Snare:218, Kick:113, Y-tom:463, B-tom:38,  G-tom:136}
+  Hard   total=1357  {Snare:338, Kick:265, Y-tom:278, Y-cym:111, B-tom:164, B-cym:41, G-tom:160}
+  Expert total=1650  {Snare:456, Kick:402, Y-tom:281, Y-cym:107, B-tom:167, B-cym:79, G-tom:158}
+```
+
+### 14.4 Densidades por dificuldade (drums)
+
+Razão `notas_E_M_H / notas_Expert`:
+
+| Música | Easy/X | Medium/X | Hard/X |
+|---|---|---|---|
+| Aerials   | 0.37 | 0.64 | 0.79 |
+| BYOB      | 0.30 | 0.41 | 0.70 |
+| Chop Suey | 0.51 | 0.63 | 0.84 |
+| Hypnotize | 0.30 | 0.42 | 0.59 |
+| Spiders   | 0.45 | 0.60 | 0.80 |
+| Toxicity  | 0.33 | 0.59 | 0.82 |
+| **Média** | **0.38** | **0.55** | **0.76** |
+
+**Comparação com guitarra** (média): E=0.23, M=0.38, H=0.64.
+
+**→ Conclusão D1:** Bateria preserva muito mais que guitarra em todas as dificuldades — porque "simplificar bateria" é mais sobre **tirar pratos**, **fundir tons** e **diminuir kick**, não tanto sobre dropar gem-events. O ritmo central é preservado.
+
+### 14.5 Regras de redução observadas (drums)
+
+**D-R1 (Lei): Easy e Medium NÃO TÊM CYMBAL.** Confirmado nas 6 músicas (0 cymbals). Todos os Y/B/G de Easy/Medium são "tom". Conversão: cymbal Hard/Expert vira tom da mesma cor em Medium/Easy (preservando a lane).
+
+**D-R2 (Lei): Snare é sagrada.** Snare é a coluna vertebral do ritmo. Razões Easy/Snare-X variam 40%–89% — sempre alta retenção comparada a outras lanes.
+
+**D-R3 (forte): Kick é fortemente decimado em Easy.** Razão Easy-kick / Expert-kick:
+- BYOB: 18 / 823 = **2%** (drasticamente reduzido)
+- Hypnotize: 44 / 313 = 14%
+- Spiders: 14 / 256 = 5%
+- Aerials: 58 / 276 = 21%
+- Chop Suey: 25 / 335 = 7%
+- Toxicity: 90 / 402 = 22%
+A regra parece ser: **Easy mantém kick só nos downbeats fortes** (geralmente sub0 do beat 1 do compasso, ou momentos enfáticos).
+
+**D-R4 (forte): Em Medium, kick mantém ~30-40% do Expert.** Reduz mas mantém mais que Easy.
+
+**D-R5 (forte): "Linhas duplas" (kick simultâneo com snare/tom) são geralmente preservadas em todos os níveis** — o "downbeat fundamental" não é dropado. Hipótese, validar.
+
+**D-R6 (hipótese): Em Hard, cymbal Expert pode virar tom da mesma cor** se a região está saturada de cymbals. Validar com inspeção.
+
+**D-R7 (hipótese): 2x kick (pitch 95, double bass) é simplificado para single kick (pitch 96) em Hard, e some completamente em Medium/Easy.** Validar olhando BYOB (que tem 99 ocorrências do pitch 95).
+
+### 14.6 Próximos passos para drums
+
+1. ⏳ Construir alinhamento Expert↔reduções drums (similar ao §7 da guitarra) para validar D-R1 a D-R7.
+2. ⏳ Estudar conversão cymbal→tom: quando Hard preserva cymbal vs converte para tom?
+3. ⏳ Estudar 2x kick reduction em BYOB.
+4. ⏳ Construir `reducer_drums.py` com regras D-R1 a D-R7 + features adicionais.
+5. ⏳ Estender `midi_writer.py` para também escrever PART DRUMS reduzido (preservando markers 110/111/112).
