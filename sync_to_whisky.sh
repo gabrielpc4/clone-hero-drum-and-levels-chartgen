@@ -33,10 +33,11 @@ fi
 
 OFICIAL="$DESKTOP/SOAD-oficial"
 GERADO="$DESKTOP/SOAD-gerado"
+CUSTOM="$DESKTOP/SOAD-custom"
 
 # Limpa runs anteriores
-rm -rf "$OFICIAL" "$GERADO"
-mkdir -p "$OFICIAL" "$GERADO"
+rm -rf "$OFICIAL" "$GERADO" "$CUSTOM"
+mkdir -p "$OFICIAL" "$GERADO" "$CUSTOM"
 
 count=0
 for src in "$REPO_DIR"/System*/; do
@@ -67,12 +68,29 @@ for src in "$REPO_DIR"/System*/; do
   count=$((count + 1))
 done
 
-echo "✅ Copiadas $count músicas para o Desktop do Whisky."
+# Custom songs (charts da comunidade em custom/)
+custom_count=0
+if [ -d "$REPO_DIR/custom" ]; then
+  for src in "$REPO_DIR/custom"/*/; do
+    [ -d "$src" ] || continue
+    song_full="$(basename "$src")"
+    short_name="$(echo "$song_full" | sed -e 's/System of a Down - //')"
+    dst="$CUSTOM/$short_name"
+    mkdir -p "$dst"
+    # Copia todos os arquivos da pasta (notes.chart, notes.mid, song.ini, album.jpg, background.jpg, *.opus)
+    cp "$src"/* "$dst/" 2>/dev/null || true
+    custom_count=$((custom_count + 1))
+  done
+fi
+
+echo "✅ Copiadas $count músicas Harmonix (oficial+gerado) e $custom_count custom."
 echo ""
 echo "📂 Caminhos no Mac:"
 echo "    $OFICIAL"
 echo "    $GERADO"
+echo "    $CUSTOM"
 echo ""
-echo "🖱  No Moonscraper (dentro do Whisky), abra File → Open File → Desktop:"
+echo "🖱  No Moonscraper (Whisky), abra File → Open File → Desktop:"
 echo "    SOAD-oficial/<música>/notes.mid   (chart oficial Harmonix)"
 echo "    SOAD-gerado/<música>/notes.mid    (chart gerado pelo nosso reducer)"
+echo "    SOAD-custom/<música>/notes.chart  (charts da comunidade)"
