@@ -183,49 +183,33 @@ def _collapse_chords(times: List[float], eps: float = 0.015) -> List[float]:
     return out
 
 
-def find_music_start_beat_ref(ref_mid: mido.MidiFile) -> float:
-    """Acha o beat onde a música começa no chart de referência. Usa o primeiro
-    marcador de seção encontrado em EVENTS (ex.: '[section gtr_intro_a]',
-    '[section intro]', '[music_start]'). Fallback: primeira nota de PART GUITAR."""
+def find_drum_start_beat_ref(ref_mid: mido.MidiFile) -> float:
+    """Primeira nota de bateria Expert (pitches 96-100) na PART DRUMS do ref."""
     tpb = ref_mid.ticks_per_beat
-    ev = next((t for t in ref_mid.tracks if t.name == "EVENTS"), None)
-    if ev is not None:
-        abs_t = 0
-        for msg in ev:
-            abs_t += msg.time
-            if msg.type in ("text", "marker"):
-                txt = msg.text
-                if txt.startswith("[section ") or txt == "[music_start]":
-                    return abs_t / tpb
-    gt = next((t for t in ref_mid.tracks if t.name == "PART GUITAR"), None)
-    if gt is not None:
-        abs_t = 0
-        for msg in gt:
-            abs_t += msg.time
-            if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
-                return abs_t / tpb
+    dt = next((t for t in ref_mid.tracks if t.name == "PART DRUMS"), None)
+    if dt is None: return 0.0
+    abs_t = 0
+    for msg in dt:
+        abs_t += msg.time
+        if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
+            return abs_t / tpb
     return 0.0
 
 
-def find_music_start_beat_src(src_mid: mido.MidiFile) -> float:
-    """Primeiro evento musical 'real' no MIDI externo — primeira nota de
-    qualquer track cujo nome contenha guitarra/bass/ibanez/gibson/iceman/etc.
-    Ignora drums (contagem de baqueta) e vocais (vocalizações pré-música)."""
+def find_drum_start_beat_src(src_mid: mido.MidiFile) -> float:
+    """Primeira nota de bateria no canal 9 do src, IGNORANDO side stick
+    (GM 37) que tipicamente é contagem de baqueta (count-in)."""
     tpb = src_mid.ticks_per_beat
-    GUITAR_HINTS = ("guitar", "gibson", "ibanez", "iceman", "strat", "tele",
-                    "bass", "thunderbird", "rickenbacker")
-    first = None
-    for t in src_mid.tracks:
-        name = next((m.name for m in t if m.type == "track_name"), "").lower()
-        if not any(k in name for k in GUITAR_HINTS): continue
-        abs_t = 0
-        for msg in t:
-            abs_t += msg.time
-            if msg.type == "note_on" and msg.velocity > 0:
-                b = abs_t / tpb
-                first = b if first is None else min(first, b)
-                break
-    return first if first is not None else 0.0
+    drum_track = next((t for t in src_mid.tracks
+                       if any(m.type == "note_on" and m.channel == 9 and m.velocity > 0 for m in t)),
+                      None)
+    if drum_track is None: return 0.0
+    abs_t = 0
+    for msg in drum_track:
+        abs_t += msg.time
+        if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9 and msg.note != 37:
+            return abs_t / tpb
+    return 0.0
 
 
 def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
@@ -352,10 +336,11 @@ def main():
     src = mido.MidiFile(args.src_mid)
     ref = mido.MidiFile(args.ref_mid)
 
-    ref_start = find_music_start_beat_ref(ref)
-    src_start = find_music_start_beat_src(src)
+    ref_start = find_drum_start_beat_ref(ref)
+    src_start = find_drum_start_beat_src(src)
     beat_offset = ref_start - src_start
-    print(f"Início musical — ref: beat {ref_start:.2f}  src: beat {src_start:.2f}")
+    print(f"1ª nota de bateria (sem side-stick count-in) — "
+          f"ref: beat {ref_start:.2f}  src: beat {src_start:.2f}")
     print(f"Alinhamento: beat_ref = beat_src + {beat_offset:+.3f}")
 
     # Remove contagem de baqueta: tudo que vier antes do src_start musical
