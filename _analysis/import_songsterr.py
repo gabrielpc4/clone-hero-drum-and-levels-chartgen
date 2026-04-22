@@ -279,75 +279,81 @@ def _part_guitar_onsets_ref(ref_mid: mido.MidiFile) -> List[float]:
     return out
 
 
-def align_by_guitar_stencil(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
-                            offset_range: Tuple[float, float] = (-32, 32),
-                            step: float = 0.1,
-                            tol: float = 0.1) -> float:
-    """Alinhamento via 'estêncil rítmico': usa PART GUITAR do ref como padrão e
-    testa offsets para encontrar onde esse padrão melhor se encaixa no conteúdo
-    agregado do Songsterr (todas notas não-drum). Métrica F1 — recall = fração
-    da ref que bate; precision = fração das notas src no range [ref_min+off,
-    ref_max+off] que batem. F1 evita offsets onde src tem muitas notas extras."""
-    ref = _collapse_chords(_part_guitar_onsets_ref(ref_mid), eps=0.08)
-    src = _collapse_chords(_collect_all_src_onsets(src_mid), eps=0.08)
-    if not ref or not src: return 0.0
+def _density_by_bar(onsets: List[float], bar_beats: int = 4) -> List[int]:
+    """Vetor de densidade por compasso (4 beats cada). Índice = número do
+    compasso; valor = quantos onsets caíram dentro."""
+    if not onsets: return []
+    max_bar = int(max(onsets) // bar_beats) + 1
+    v = [0] * max_bar
+    for o in onsets:
+        b = int(o // bar_beats)
+        if 0 <= b < max_bar: v[b] += 1
+    return v
 
-    ref_sorted = sorted(ref); src_sorted = sorted(src)
-    ref_min, ref_max = ref_sorted[0], ref_sorted[-1]
 
-    best = (-1.0, 0.0)  # (f1, offset)
-    off_min, off_max = offset_range
-    n_steps = int((off_max - off_min) / step) + 1
-    for i in range(n_steps):
-        off = off_min + i * step
-        # Conta matches ref→src deslocado. Equivalente a: ref[i] ≈ src[j] - off.
-        matches = 0
-        for r in ref_sorted:
-            shifted = r - off
-            idx = bisect.bisect_left(src_sorted, shifted)
-            for j in (idx - 1, idx):
-                if 0 <= j < len(src_sorted) and abs(src_sorted[j] - shifted) <= tol:
-                    matches += 1; break
-        if matches == 0: continue
-        # Precision: src notes dentro da janela [ref_min-off, ref_max-off] que batem
-        win_lo = ref_min - off - tol
-        win_hi = ref_max - off + tol
-        src_in_window = [s for s in src_sorted if win_lo <= s <= win_hi]
-        if not src_in_window: continue
-        matches_from_src = 0
-        for s in src_in_window:
-            shifted = s + off
-            idx = bisect.bisect_left(ref_sorted, shifted)
-            for j in (idx - 1, idx):
-                if 0 <= j < len(ref_sorted) and abs(ref_sorted[j] - shifted) <= tol:
-                    matches_from_src += 1; break
-        recall = matches / len(ref_sorted)
-        precision = matches_from_src / len(src_in_window)
-        if recall == 0 or precision == 0: continue
-        f1 = 2 * recall * precision / (recall + precision)
-        if f1 > best[0]: best = (f1, off)
+def _cross_correlate(ref_v: List[int], src_v: List[int]) -> int:
+    """Acha o deslocamento inteiro k que maximiza correlação de Pearson
+    entre ref_v e src_v[k:k+len(ref_v)]. Retorna k em compassos."""
+    nr, ns = len(ref_v), len(src_v)
+    if nr == 0 or ns == 0: return 0
+    import math
+    rmean = sum(ref_v) / nr
+    rcenter = [x - rmean for x in ref_v]
+    rnorm = math.sqrt(sum(x*x for x in rcenter)) or 1.0
+
+    best = (-2.0, 0)  # (correlation, k)
+    k_min, k_max = -nr + 1, ns - 1  # faixa onde há ao menos 1 bar de overlap
+    for k in range(k_min, k_max + 1):
+        # Segmento do src alinhado: src[k..k+nr-1] (ou overlap parcial)
+        lo = max(0, k); hi = min(ns, k + nr)
+        if hi - lo < min(8, nr // 4): continue  # precisa overlap mínimo
+        src_seg = src_v[lo:hi]
+        ref_seg = rcenter[lo-k:hi-k]
+        smean = sum(src_seg) / len(src_seg)
+        scenter = [x - smean for x in src_seg]
+        snorm = math.sqrt(sum(x*x for x in scenter)) or 1.0
+        dot = sum(a*b for a,b in zip(ref_seg, scenter))
+        corr = dot / (rnorm * snorm)
+        if corr > best[0]: best = (corr, k)
     return best[1]
+
+
+def align_by_guitar_stencil(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
+                            bar_beats: int = 4) -> float:
+    """Alinhamento por correlação de densidade por compasso. Neutraliza
+    diferenças de quantização sub-beat preservando a estrutura macro da
+    música (intro esparsa, verso médio, refrão denso, etc.)."""
+    ref = _part_guitar_onsets_ref(ref_mid)
+    src = _collect_all_src_onsets(src_mid)
+    if not ref or not src: return 0.0
+    ref_v = _density_by_bar(ref, bar_beats)
+    src_v = _density_by_bar(src, bar_beats)
+    k_bars = _cross_correlate(ref_v, src_v)
+    # Offset em beats: ref_beat = src_beat + k*bar_beats
+    # (se k > 0, ref começa k compassos à frente do src equivalente)
+    return float(k_bars * bar_beats)
 
 
 def resolve_alignment(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
                       override_offset: float | None = None) -> Tuple[float, float, str]:
-    """Resolve (beat_offset, src_anchor_beat, method_name).
-      1) override_offset manual se fornecido.
-      2) drum-based quando ref TEM PART DRUMS com notas.
-      3) estêncil-de-guitarra via F1 (usa PART GUITAR do ref como template e
-         todas as notas não-drum do src como pool).
+    """Resolve (beat_offset, src_anchor_beat, method).
+
+    CASO REAL (custom): ref só tem PART GUITAR, src é MIDI externo.
+    Default: alinha primeira nota de PART GUITAR ref com primeira nota de
+    qualquer track de guitarra/baixo do src. Funciona quando o chart CH
+    charteia a intro (mesmo início que o Songsterr).
+
+    Quando falha (ex: Toxicity — Songsterr tem acústica que a custom não
+    inclui), passar `--offset-beats N` manual após ver no Moonscraper.
     """
     if override_offset is not None:
-        return override_offset, 0.0, "override"
-
-    ref_drum = _first_drum_beat_ref(ref_mid)
-    src_drum = _first_drum_beat_src(src_mid)
-    if ref_drum is not None and src_drum is not None:
-        return (ref_drum - src_drum), src_drum, "drum"
-
-    off = align_by_guitar_stencil(ref_mid, src_mid)
-    src_anchor = _first_guitar_beat_src(src_mid) or 0.0
-    return off, src_anchor, "guitar-stencil"
+        src_anchor = _first_guitar_beat_src(src_mid) or 0.0
+        return override_offset, src_anchor, "override"
+    ref_gt = _first_guitar_beat_ref(ref_mid)
+    src_gt = _first_guitar_beat_src(src_mid)
+    if ref_gt is not None and src_gt is not None:
+        return (ref_gt - src_gt), src_gt, "guitar-first"
+    return 0.0, 0.0, "fallback-zero"
 
 
 def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
@@ -479,13 +485,25 @@ def main():
     ref = mido.MidiFile(args.ref_mid)
 
     beat_offset, src_anchor, method = resolve_alignment(ref, src, args.offset_beats)
+    drop_beat = args.drop_before_src_beat if args.drop_before_src_beat is not None else src_anchor
     print(f"Alinhamento ({method}): beat_ref = beat_src + {beat_offset:+.3f}"
-          f"  | drop_before_src_beat = {args.drop_before_src_beat or src_anchor:.2f}")
+          f"  drop antes de src_beat {drop_beat:.2f}")
 
-    new_drums = build_drums_track(
-        src, beat_offset, ref.ticks_per_beat,
-        drop_before_src_beat=(args.drop_before_src_beat
-                              if args.drop_before_src_beat is not None else src_anchor))
+    new_drums = build_drums_track(src, beat_offset, ref.ticks_per_beat,
+                                  drop_before_src_beat=drop_beat)
+
+    # Diagnóstico: beats/seg da primeira drum gerada (usuário pode checar no Moonscraper)
+    ref_tm = _tempo_map(ref.tracks[0], ref.ticks_per_beat)
+    drum_ticks = [m.note for m in new_drums if m.type=="note_on" and m.velocity>0]  # placeholder
+    abs_t = 0; first_drum_tick = None
+    for m in new_drums:
+        abs_t += m.time
+        if m.type == "note_on" and m.velocity > 0 and 96 <= m.note <= 100:
+            first_drum_tick = abs_t; break
+    if first_drum_tick is not None:
+        print(f"  → 1ª drum gerada: tick={first_drum_tick} beat={first_drum_tick/ref.ticks_per_beat:.2f} "
+              f"sec={tick_to_seconds(first_drum_tick, ref_tm):.2f}")
+    print(f"  Se o áudio não bater: ajuste com --offset-beats N (positivo atrasa no target, negativo adianta)")
     print(f"PART DRUMS gerado: {sum(1 for m in new_drums if m.type=='note_on' and m.velocity>0)} eventos")
 
     # Monta saída: clona a ref, substitui PART DRUMS
