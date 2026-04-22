@@ -406,6 +406,97 @@ def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
     return best
 
 
+def _build_anchor_pairs(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
+                        ref_tm, src_tm, beat_offset_sec: float,
+                        max_gap_sec: float = 0.8) -> List[Tuple[float, float]]:
+    """Constrói pares (src_sec, ref_sec) de correspondência entre onsets da
+    PART GUITAR do ref e onsets das guitarras do src, usando greedy monotônico.
+
+    Cada nota da PART GUITAR ref procura a mais próxima no src (após aplicar
+    offset) dentro de max_gap_sec. Se achar e ainda for temporalmente coerente
+    com pares anteriores, vira âncora."""
+    # Colapsa acordes (Songsterr emite cada corda individualmente)
+    ref_onsets = _collapse_chords(
+        [tick_to_seconds(t, ref_tm) for t in _part_guitar_tick_onsets(ref_mid)],
+        eps=0.03)
+    src_onsets = _collapse_chords(
+        [tick_to_seconds(t, src_tm) for t in _src_guitar_tick_onsets(src_mid)],
+        eps=0.03)
+    if not ref_onsets or not src_onsets: return []
+
+    pairs: List[Tuple[float, float]] = [(0.0, beat_offset_sec)]  # âncora inicial
+    src_sorted = sorted(src_onsets)
+    last_src, last_ref = 0.0, beat_offset_sec
+    for r in sorted(ref_onsets):
+        expected_src = last_src + (r - last_ref)  # estimativa linear do src correspondente
+        # Busca src mais próximo à expected_src dentro de ±max_gap
+        lo = bisect.bisect_left(src_sorted, expected_src - max_gap_sec)
+        hi = bisect.bisect_right(src_sorted, expected_src + max_gap_sec)
+        best_s = None; best_d = max_gap_sec + 1
+        for j in range(lo, hi):
+            s = src_sorted[j]
+            if s <= last_src: continue  # monotônico
+            d = abs(s - expected_src)
+            if d < best_d: best_d = d; best_s = s
+        if best_s is not None:
+            pairs.append((best_s, r))
+            last_src, last_ref = best_s, r
+    return pairs
+
+
+def _part_guitar_tick_onsets(ref_mid: mido.MidiFile) -> List[int]:
+    tpb = ref_mid.ticks_per_beat
+    gt = next((t for t in ref_mid.tracks if t.name == "PART GUITAR"), None)
+    if gt is None: return []
+    out = []; abs_t = 0
+    for msg in gt:
+        abs_t += msg.time
+        if msg.type == "note_on" and msg.velocity > 0 and 96 <= msg.note <= 100:
+            out.append(abs_t)
+    return out
+
+
+def _src_guitar_tick_onsets(src_mid: mido.MidiFile) -> List[int]:
+    """Onsets (ticks) de todas as tracks de guitarra do src."""
+    HINTS = ("guitar", "gibson", "ibanez", "iceman", "strat", "tele", "fender")
+    EXCLUDE = ("bass","thunderbird","vocal","piano","string","arrange","drums")
+    out = []
+    for t in src_mid.tracks:
+        name = next((m.name for m in t if m.type=="track_name"), "").lower()
+        if any(k in name for k in EXCLUDE): continue
+        if not any(k in name for k in HINTS): continue
+        abs_t = 0
+        for msg in t:
+            abs_t += msg.time
+            if msg.type == "note_on" and msg.velocity > 0 and msg.channel != 9:
+                out.append(abs_t)
+    return sorted(out)
+
+
+def _interpolate_time(src_sec: float, pairs: List[Tuple[float, float]]) -> float:
+    """Interpola o tempo ref_sec correspondente a src_sec usando o conjunto
+    piecewise-linear de pares âncora. Extrapola linearmente fora do range."""
+    if not pairs: return src_sec
+    src_vals = [p[0] for p in pairs]
+    # bisect para achar segmento
+    idx = bisect.bisect_left(src_vals, src_sec)
+    if idx == 0:
+        # Extrapola usando primeiro segmento
+        if len(pairs) >= 2:
+            s0, r0 = pairs[0]; s1, r1 = pairs[1]
+            if s1 > s0:
+                return r0 + (src_sec - s0) * (r1 - r0) / (s1 - s0)
+        return pairs[0][1] + (src_sec - pairs[0][0])
+    if idx >= len(pairs):
+        s0, r0 = pairs[-2]; s1, r1 = pairs[-1]
+        if s1 > s0:
+            return r1 + (src_sec - s1) * (r1 - r0) / (s1 - s0)
+        return r1 + (src_sec - s1)
+    s0, r0 = pairs[idx-1]; s1, r1 = pairs[idx]
+    if s1 == s0: return r0
+    return r0 + (src_sec - s0) * (r1 - r0) / (s1 - s0)
+
+
 def _sec_to_tick(sec: float, tempo_map: List[Tuple[int, float]]) -> int:
     """Inverse de tick_to_seconds usando o mesmo mapa."""
     if sec <= 0: return 0
@@ -437,7 +528,8 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                       target_tpb: int, drop_before_src_beat: float = 0.0,
                       ref_tempo_map=None, time_scale: float = 1.0,
                       sync_mode: str = "auto",
-                      dedup_beats: float = 1/16) -> mido.MidiTrack:
+                      dedup_beats: float = 1/16,
+                      ref_mid: "mido.MidiFile | None" = None) -> mido.MidiTrack:
     """Converte notas de bateria (canal 9) do src para o domínio de ticks do
     target. Trabalha em BEATS: cada nota em beat B_src → beat (B_src + offset)
     no target → tick = (B_src + offset) * target_tpb.
@@ -527,21 +619,34 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     abs_src = 0
     events_abs = []
     if sync_mode == "sec":
-        # Converte src tick → segundos → ref tick via tempo maps
         anchor_src_sec = tick_to_seconds(int(drop_before_src_beat * src_tpb), src_tm)
         anchor_ref_tick = int((drop_before_src_beat + beat_offset) * target_tpb)
         anchor_ref_sec = tick_to_seconds(anchor_ref_tick, ref_tempo_map)
+        # Multi-anchor: se ref_mid fornecido, usa guitarra do ref como ground
+        # truth de tempo ao longo da música; interpola piecewise-linear.
+        # Multi-anchor (opcional): alinha guitarra ref ↔ guitarra src ao longo
+        # da música. Desabilitado por padrão — matches falsos nas guitarras
+        # Songsterr introduzem ruído. Ativar apenas se quiser experimentar.
+        anchor_pairs = []
+        if ref_mid is not None and os.environ.get("IMPORT_MULTI_ANCHOR") == "1":
+            anchor_pairs = _build_anchor_pairs(
+                ref_mid, src_mid, ref_tempo_map, src_tm,
+                beat_offset_sec=(anchor_ref_sec - anchor_src_sec))
+            print(f"  {len(anchor_pairs)} âncoras guitar↔guitar construídas")
         for msg in drum_track:
             abs_src += msg.time
             if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
                 if (abs_src, msg.note) in dedup_skipped: continue
                 if abs_src / src_tpb < drop_before_src_beat: continue
                 src_sec = tick_to_seconds(abs_src, src_tm)
-                target_sec = anchor_ref_sec + time_scale * (src_sec - anchor_src_sec)
+                if anchor_pairs:
+                    target_sec = _interpolate_time(src_sec, anchor_pairs)
+                else:
+                    target_sec = anchor_ref_sec + time_scale * (src_sec - anchor_src_sec)
                 if target_sec < 0: continue
                 lane, is_cym = _resolve_lane(msg.note)
                 if lane is None: continue
-                if (abs_src, msg.note) in flam_snare_second:  # flam em snare: 2ª nota vira Y-tom
+                if (abs_src, msg.note) in flam_snare_second:
                     lane, is_cym = LANE_YELLOW, False
                 target_tick = _sec_to_tick(target_sec, ref_tempo_map)
                 events_abs.append((target_tick, 96 + lane, lane, is_cym))
@@ -633,12 +738,24 @@ def main():
     ref_tm = _tempo_map(ref.tracks[0], ref.ticks_per_beat)
     src_tm = _tempo_map(src.tracks[0], src.ticks_per_beat)
 
-    # Escala temporal: por padrão 1.0 — os tempo maps src e ref já descrevem
-    # o áudio corretamente em segundos (mesmo que BPM/time-sig difiram na
-    # notação, a duração em segundos é consistente). Override útil só para
-    # casos onde o MIDI externo tem tempo map errado (BPM inventado).
-    time_scale = args.time_scale if args.time_scale is not None else 1.0
-    scale_src = "override" if args.time_scale is not None else "default=1.0"
+    # Escala temporal: por padrão calculada pela razão de durações das
+    # guitarras (primeira↔primeira, última↔última de ref vs src). Corrige
+    # drift linear quando o tempo map do Songsterr não bate perfeitamente
+    # com o áudio.
+    if args.time_scale is not None:
+        time_scale = args.time_scale
+        scale_src = "override"
+    else:
+        ref_onsets_sec = [tick_to_seconds(t, ref_tm) for t in _part_guitar_tick_onsets(ref)]
+        src_onsets_sec = [tick_to_seconds(t, src_tm) for t in _src_guitar_tick_onsets(src)]
+        if len(ref_onsets_sec) >= 2 and len(src_onsets_sec) >= 2:
+            dur_ref = max(ref_onsets_sec) - min(ref_onsets_sec)
+            dur_src = max(src_onsets_sec) - min(src_onsets_sec)
+            time_scale = dur_ref / dur_src if dur_src > 0 else 1.0
+            scale_src = f"auto (dur_ref={dur_ref:.1f}s / dur_src={dur_src:.1f}s)"
+        else:
+            time_scale = 1.0
+            scale_src = "default=1.0"
 
     print(f"Alinhamento ({method}): beat_ref = beat_src + {beat_offset:+.3f}"
           f"  drop antes de src_beat {drop_beat:.2f}")
@@ -648,7 +765,8 @@ def main():
                                   drop_before_src_beat=drop_beat,
                                   ref_tempo_map=ref_tm, time_scale=time_scale,
                                   sync_mode=args.sync_mode,
-                                  dedup_beats=args.dedup_beats)
+                                  dedup_beats=args.dedup_beats,
+                                  ref_mid=ref)
 
     # Diagnóstico: beats/seg da primeira drum gerada (usuário pode checar no Moonscraper)
     ref_tm = _tempo_map(ref.tracks[0], ref.ticks_per_beat)
