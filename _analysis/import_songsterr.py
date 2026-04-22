@@ -720,8 +720,9 @@ def main():
                     help="override manual do offset em beats (ref = src + N)")
     ap.add_argument("--drop-before-src-beat", type=float, default=None,
                     help="override: dropa notas src antes deste beat")
-    ap.add_argument("--time-scale", type=float, default=1.0,
-                    help="escala temporal aplicada em sync-mode=sec (default 1.0)")
+    ap.add_argument("--time-scale", type=float, default=None,
+                    help="escala temporal src→ref em sync-mode=sec. Default: auto "
+                         "(razão de durações das guitarras ref/src).")
     ap.add_argument("--sync-mode", choices=("auto", "beat", "sec"), default="auto",
                     help="auto (default): beat-mode se BPMs batem, sec-mode caso contrário. "
                          "beat: preserva posição em beats musicais. "
