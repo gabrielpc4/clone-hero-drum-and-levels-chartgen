@@ -452,12 +452,15 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         except Exception:
             sync_mode = "beat"
 
-    # Dedup de "flams" — pares de notas na MESMA lane+is_cymbal com gap ≤
-    # dedup_beats. Default 1/16 beat pega flams comuns do Songsterr (≈ 30ms).
-    # O segundo ataque é descartado.
+    # Flam detection — pares mesma-lane+cymbal com gap ≤ dedup_beats.
+    # Default 1/16 beat (~30ms). Tratamento por lane:
+    #   - Snare: segunda nota vira Y-tom (preserva sensação de baqueta dupla
+    #     como "vermelho+amarelo").
+    #   - Outras lanes: segunda nota descartada (simples dedup).
     dedup_gap_ticks = int(round(src_tpb * dedup_beats))
     last_tick_by_lane: Dict[Tuple[int, bool], int] = {}
     dedup_skipped: set = set()
+    flam_snare_second: set = set()  # ticks src: segunda nota de flam em snare → vira Y-tom
     abs_src = 0
     for msg in drum_track:
         abs_src += msg.time
@@ -470,7 +473,11 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
             key = (lane_raw, is_cym_raw)
             last = last_tick_by_lane.get(key)
             if last is not None and abs_src - last <= dedup_gap_ticks:
-                dedup_skipped.add(abs_src)
+                if lane_raw == LANE_SNARE:
+                    flam_snare_second.add(abs_src)
+                    last_tick_by_lane[key] = abs_src  # atualiza âncora para próximo check
+                else:
+                    dedup_skipped.add(abs_src)
             else:
                 last_tick_by_lane[key] = abs_src
 
@@ -494,6 +501,8 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                 lane, is_cym = rb
                 if msg.note == 46:
                     lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
+                if abs_src in flam_snare_second:  # flam em snare: 2ª nota vira Y-tom
+                    lane, is_cym = LANE_YELLOW, False
                 target_tick = _sec_to_tick(target_sec, ref_tempo_map)
                 events_abs.append((target_tick, 96 + lane, lane, is_cym))
     else:  # "beat" mode
@@ -510,6 +519,8 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                 lane, is_cym = rb
                 if msg.note == 46:
                     lane, is_cym = (LANE_YELLOW if open_mode_yellow else LANE_BLUE), True
+                if abs_src in flam_snare_second:
+                    lane, is_cym = LANE_YELLOW, False
                 target_tick = int(round(tgt_beat * target_tpb))
                 events_abs.append((target_tick, 96 + lane, lane, is_cym))
 
