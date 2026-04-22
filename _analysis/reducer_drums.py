@@ -136,32 +136,23 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
         cym_notes = by_lane_cym.get((src_lane, True), [])
         if not cym_notes: continue
 
+        # Override por preferência do usuário (2026-04-22):
+        # cymbal Expert PRESERVA como cymbal em E/M também (sobrescreve D-R1).
+        # A frequência de retenção continua proporcional ao target_lane do nível,
+        # mas o destino mantém o is_cymbal=True.
         if target_diff == "Hard":
-            # D-R11: Y-cym preservada (~93%)
-            # D-R10: G-cym → Blue-cym se densidade alta
-            # B-cym: variável (~46%)
             cym_target = CYMBAL_RATIOS_HARD.get(src_lane, 0.5)
-            n_keep = max(0, round(len(cym_notes) * cym_target))
-            chosen = sorted(cym_notes, key=lambda n: -score(n))[:n_keep]
-            for n in chosen:
-                if src_lane == LANE_GREEN and green_cym_strategy == "to_blue_cym":
-                    kept_notes.append(DrumNote(tick=n.tick, lane=LANE_BLUE, is_cymbal=True, velocity=n.velocity))
-                else:
-                    kept_notes.append(DrumNote(tick=n.tick, lane=src_lane, is_cymbal=True, velocity=n.velocity))
         else:
-            # Easy/Medium: cymbal vira tom (D-R1.1)
-            # Y-cym → Y-tom; B-cym → B-tom (com consolidação); G-cym → Blue-tom
-            frac = CYMBAL_TO_TOM_FRACTION[target_diff]
-            n_keep = max(0, round(len(cym_notes) * frac))
-            chosen = sorted(cym_notes, key=lambda n: -score(n))[:n_keep]
-            for n in chosen:
-                if src_lane == LANE_GREEN:
-                    dst = LANE_BLUE  # G-cym vira Blue-tom em E/M (D-R1.1)
-                else:
-                    dst = src_lane
-                if target_diff in ("Easy", "Medium"):
-                    dst = lane_consol.get(dst, dst)
-                kept_notes.append(DrumNote(tick=n.tick, lane=dst, is_cymbal=False, velocity=n.velocity))
+            # Em E/M, usar fração do tom_target da própria lane (proporcional)
+            cym_target = target.get(src_lane, 0.5) * 0.7
+        n_keep = max(0, round(len(cym_notes) * cym_target))
+        chosen = sorted(cym_notes, key=lambda n: -score(n))[:n_keep]
+        for n in chosen:
+            # G-cym pode virar B-cym em Hard (D-R10) ou em E/M (consistência visual)
+            if src_lane == LANE_GREEN and green_cym_strategy == "to_blue_cym":
+                kept_notes.append(DrumNote(tick=n.tick, lane=LANE_BLUE, is_cymbal=True, velocity=n.velocity))
+            else:
+                kept_notes.append(DrumNote(tick=n.tick, lane=src_lane, is_cymbal=True, velocity=n.velocity))
 
     # ---- Kick (D-R3, D-R4) — só paired em E/M ----
     kick_notes = by_lane_cym.get((LANE_KICK, False), [])
@@ -183,11 +174,56 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
 
     # Sort final
     kept_notes.sort(key=lambda n: (n.tick, n.lane))
+
+    # Filtro anti-rápido em Hard/Medium (preferência do usuário 2026-04-22):
+    # sequências em 16ths consecutivos (gap < 1/4 nota = tpb//4) cansam o jogador,
+    # então afinamos para colcheias (Hard) ou semínimas (Medium).
+    if target_diff in ("Hard", "Medium"):
+        kept_notes = filter_fast_clusters(kept_notes, tpb, target_diff)
+
     return DrumChart(
         difficulty=target_diff, ticks_per_beat=tpb, notes=kept_notes,
         overdrive=list(expert.overdrive), drum_fills=list(expert.drum_fills),
         cymbal_flags=dict(expert.cymbal_flags),
     )
+
+
+def filter_fast_clusters(notes: List[DrumNote], tpb: int, diff: str) -> List[DrumNote]:
+    """Em sequências de 16ths (gap ≤ tpb//4) por LANE+CYMBAL, decimar os fracos.
+       Hard: mantém sub0 + sub2 (colcheias). Medium: mantém só sub0 (semínimas).
+       Não toca em snare (sagrada por D-R2) nem em kick (já decimado por D-R3)."""
+    if not notes: return notes
+    by_lane: Dict[Tuple[int, bool], List[DrumNote]] = defaultdict(list)
+    others: List[DrumNote] = []
+    for n in notes:
+        if n.lane in (LANE_KICK, LANE_SNARE):
+            others.append(n)
+        else:
+            by_lane[(n.lane, n.is_cymbal)].append(n)
+
+    out: List[DrumNote] = list(others)
+    sixteenth = tpb // 4  # 120 ticks @ tpb=480
+    for (lane, is_cym), lane_notes in by_lane.items():
+        lane_notes.sort(key=lambda n: n.tick)
+        i = 0
+        while i < len(lane_notes):
+            cluster = [lane_notes[i]]
+            while i + 1 < len(lane_notes) and lane_notes[i+1].tick - cluster[-1].tick <= sixteenth:
+                cluster.append(lane_notes[i+1])
+                i += 1
+            if len(cluster) <= 2:
+                out.extend(cluster)
+            else:
+                # Cluster rápido (≥3 notas em 16ths): manter apenas sub-beats fortes
+                for n in cluster:
+                    sub = (n.tick % tpb) // (tpb // 4)
+                    if diff == "Hard" and sub in (0, 2):
+                        out.append(n)
+                    elif diff == "Medium" and sub == 0:
+                        out.append(n)
+            i += 1
+    out.sort(key=lambda n: (n.tick, n.lane))
+    return out
 
 
 def compare_drum_charts(off: DrumChart, gen: DrumChart) -> dict:

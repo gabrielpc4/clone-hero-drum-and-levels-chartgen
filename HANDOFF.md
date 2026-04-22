@@ -939,12 +939,29 @@ Para cada Y-cym/B-cym/G-cym Expert que sobrevive em Easy/Medium:
 - Adiciona notas geradas por `reduce_drums()` na pitch correta de cada lane/dificuldade
 - **Validado: Expert intacto 100% nas 6 músicas para ambas PARTs.**
 
-### 14.10 Próximos passos drums
+### 14.10 Overrides por preferência do usuário (2026-04-22)
 
-1. ✅ Análise estrutural completa.
-2. ✅ Reducer drums + writer MIDI.
-3. ⏳ Validação subjetiva pelo usuário no Moonscraper.
-4. ⏳ Possíveis melhorias futuras:
-   - Snare ratio adaptativo por densidade (Hypnotize 89% vs Toxicity 43%).
-   - Detecção de **sequência de tom-fills** (preservar inteiros em E/M, não decimar).
-   - Modelagem de rolls/swells em runs longos de snare.
+Após validação visual, o usuário pediu **dois desvios das regras observadas**:
+
+**Override 1: Cymbal preservado em Easy/Medium** (sobrescreve D-R1)
+- Charts oficiais Harmonix convertem cymbal Expert → tom em E/M (Pro Drums só em Hard/Expert).
+- O usuário prefere que cymbal Expert **continue cymbal em E/M**, com a mesma frequência da regra atual (target_lane * 0.7 dos cymbals Expert).
+- Implicação: o jogador em Pro Drums mode verá pratos em E/M (depende do CH suportar — o marker 110/111/112 já é preservado pelo writer).
+
+**Override 2: Anti-clusters-rápidos em Hard/Medium**
+- Sequências de notas mesma lane com gap ≤ 1/16 nota (=tpb/4) que durem ≥ 3 notas são consideradas "rápidas demais" para Hard/Medium.
+- **Hard:** mantém apenas sub0 (on-beat) e sub2 (& do beat) → vira colcheias.
+- **Medium:** mantém apenas sub0 → vira semínimas.
+- Não afeta snare (D-R2 sagrada) nem kick (já decimado por D-R3).
+- Caso disparador: início de Hypnotize tem amarelo 16ths que o oficial mantém integral em Hard, mas o usuário considerou "muito rápido pro Hard".
+
+Implementação em `_analysis/reducer_drums.py`:
+- Função `filter_fast_clusters()` aplicada após seleção principal.
+- F1 vs charts oficiais cai em algumas músicas (esperado — o gerador agora **diverge intencionalmente** do oficial).
+
+### 14.11 Próximos passos drums
+
+1. ✅ Análise estrutural + reducer + writer MIDI.
+2. ✅ Overrides por preferência do usuário.
+3. ⏳ Validação subjetiva no Moonscraper.
+4. ⏳ Possíveis melhorias futuras: snare ratio adaptativo, fills inteiros preservados em E/M, rolls/swells.
