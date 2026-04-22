@@ -1,0 +1,29 @@
+# Áudio (não vai pro Git — pesado e potencialmente sob copyright)
+*.opus
+*.ogg
+*.wav
+*.mp3
+*.flac
+*.m4a
+
+# macOS
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*~
+
+# Backup do parser/análise (geralmente intermediário, regenerável)
+_analysis/__pycache__/

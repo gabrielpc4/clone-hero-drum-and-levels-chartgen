@@ -1,0 +1,1907 @@
+{
+  "Aerials": {
+    "q1_subset": {
+      "Easy": {
+        "total": 204,
+        "in_expert": 204,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Medium": {
+        "total": 309,
+        "in_expert": 309,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Hard": {
+        "total": 558,
+        "in_expert": 558,
+        "only_in_diff": 0,
+        "example_orphans": []
+      }
+    },
+    "q2_density_by_beat": {
+      "Easy": {
+        "sub0": [
+          144,
+          258,
+          0.558
+        ],
+        "sub1": [
+          0,
+          188,
+          0.0
+        ],
+        "sub2": [
+          44,
+          251,
+          0.175
+        ],
+        "sub3": [
+          16,
+          240,
+          0.067
+        ]
+      },
+      "Medium": {
+        "sub0": [
+          187,
+          258,
+          0.725
+        ],
+        "sub1": [
+          30,
+          188,
+          0.16
+        ],
+        "sub2": [
+          44,
+          251,
+          0.175
+        ],
+        "sub3": [
+          48,
+          240,
+          0.2
+        ]
+      },
+      "Hard": {
+        "sub0": [
+          221,
+          258,
+          0.857
+        ],
+        "sub1": [
+          63,
+          188,
+          0.335
+        ],
+        "sub2": [
+          185,
+          251,
+          0.737
+        ],
+        "sub3": [
+          89,
+          240,
+          0.371
+        ]
+      }
+    },
+    "q3_chord_reduction": {
+      "Easy": {
+        "size_change": {
+          "2\u21920": 214,
+          "2\u21921": 85,
+          "3\u21921": 2,
+          "3\u21920": 4
+        },
+        "kept_position": {
+          "transposed_outside": 42,
+          "lowest": 44,
+          "middle": 1
+        },
+        "kept_fret": {
+          "Y*": 36,
+          "R": 29,
+          "G": 13,
+          "Y": 3,
+          "G*": 6
+        },
+        "intersection_pattern": {}
+      },
+      "Medium": {
+        "size_change": {
+          "2\u21920": 195,
+          "2\u21922": 104,
+          "3\u21922": 3,
+          "3\u21920": 3
+        },
+        "kept_position": {},
+        "kept_fret": {},
+        "intersection_pattern": {
+          "E2\u2192R2 inter=1": 73,
+          "E2\u2192R2 inter=2": 31,
+          "E3\u2192R2 inter=2": 2,
+          "E3\u2192R2 inter=1": 1
+        }
+      },
+      "Hard": {
+        "size_change": {
+          "2\u21920": 126,
+          "2\u21922": 173,
+          "3\u21922": 6
+        },
+        "kept_position": {},
+        "kept_fret": {},
+        "intersection_pattern": {
+          "E2\u2192R2 inter=2": 173,
+          "E3\u2192R2 inter=2": 6
+        }
+      }
+    },
+    "q3b_single_transposition": {
+      "Easy": {
+        "Y\u2192R": 24,
+        "G\u2192G": 29,
+        "O\u2192Y": 13,
+        "R\u2192R": 14,
+        "Y\u2192Y": 7,
+        "R\u2192G": 20,
+        "O\u2192B": 1,
+        "R\u2192O": 2,
+        "B\u2192G": 6
+      },
+      "Medium": {
+        "Y\u2192Y": 38,
+        "R\u2192R": 58,
+        "G\u2192G": 76,
+        "O\u2192B": 14,
+        "Y\u2192B": 7,
+        "R\u2192B": 2,
+        "Y\u2192O": 1,
+        "B\u2192R": 6
+      },
+      "Hard": {
+        "Y\u2192Y": 38,
+        "O\u2192O": 152,
+        "R\u2192R": 44,
+        "G\u2192G": 91,
+        "O\u2192B": 8,
+        "G\u2192R": 16,
+        "R\u2192Y": 16,
+        "Y\u2192B": 8,
+        "B\u2192B": 6
+      }
+    },
+    "q4_sustain": {
+      "Easy": {
+        "<1/16": {
+          "total": 8,
+          "dropped": 7,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        "1/16-1/8": {
+          "total": 871,
+          "dropped": 711,
+          "kept_hit": 0,
+          "kept_sustain": 160
+        },
+        "1/8-1/4": {
+          "total": 48,
+          "dropped": 15,
+          "kept_hit": 0,
+          "kept_sustain": 33
+        },
+        "1/4-1/2": {
+          "total": 9,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 9
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Medium": {
+        "<1/16": {
+          "total": 8,
+          "dropped": 8,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 871,
+          "dropped": 605,
+          "kept_hit": 0,
+          "kept_sustain": 266
+        },
+        "1/8-1/4": {
+          "total": 48,
+          "dropped": 15,
+          "kept_hit": 0,
+          "kept_sustain": 33
+        },
+        "1/4-1/2": {
+          "total": 9,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 9
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Hard": {
+        "<1/16": {
+          "total": 8,
+          "dropped": 4,
+          "kept_hit": 0,
+          "kept_sustain": 4
+        },
+        "1/16-1/8": {
+          "total": 871,
+          "dropped": 375,
+          "kept_hit": 0,
+          "kept_sustain": 496
+        },
+        "1/8-1/4": {
+          "total": 48,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 48
+        },
+        "1/4-1/2": {
+          "total": 9,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 9
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      }
+    }
+  },
+  "B.Y.O.B.": {
+    "q1_subset": {
+      "Easy": {
+        "total": 269,
+        "in_expert": 269,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Medium": {
+        "total": 485,
+        "in_expert": 479,
+        "only_in_diff": 6,
+        "example_orphans": [
+          152160,
+          153120,
+          219360,
+          220320,
+          223200
+        ]
+      },
+      "Hard": {
+        "total": 812,
+        "in_expert": 806,
+        "only_in_diff": 6,
+        "example_orphans": [
+          152160,
+          153120,
+          219360,
+          220320,
+          223200
+        ]
+      }
+    },
+    "q2_density_by_beat": {
+      "Easy": {
+        "sub0": [
+          219,
+          437,
+          0.501
+        ],
+        "sub1": [
+          0,
+          345,
+          0.0
+        ],
+        "sub2": [
+          50,
+          534,
+          0.094
+        ],
+        "sub3": [
+          0,
+          274,
+          0.0
+        ]
+      },
+      "Medium": {
+        "sub0": [
+          303,
+          437,
+          0.693
+        ],
+        "sub1": [
+          8,
+          345,
+          0.023
+        ],
+        "sub2": [
+          131,
+          534,
+          0.245
+        ],
+        "sub3": [
+          37,
+          274,
+          0.135
+        ]
+      },
+      "Hard": {
+        "sub0": [
+          332,
+          437,
+          0.76
+        ],
+        "sub1": [
+          8,
+          345,
+          0.023
+        ],
+        "sub2": [
+          421,
+          534,
+          0.788
+        ],
+        "sub3": [
+          45,
+          274,
+          0.164
+        ]
+      }
+    },
+    "q3_chord_reduction": {
+      "Easy": {
+        "size_change": {
+          "2\u21921": 112,
+          "2\u21920": 327
+        },
+        "kept_position": {
+          "lowest": 104,
+          "transposed_outside": 8
+        },
+        "kept_fret": {
+          "R": 41,
+          "Y*": 8,
+          "Y": 11,
+          "G": 52
+        },
+        "intersection_pattern": {}
+      },
+      "Medium": {
+        "size_change": {
+          "2\u21921": 48,
+          "2\u21920": 227,
+          "2\u21922": 164
+        },
+        "kept_position": {
+          "lowest": 16,
+          "highest": 12,
+          "transposed_outside": 20
+        },
+        "kept_fret": {
+          "R": 3,
+          "B": 13,
+          "R*": 14,
+          "G": 12,
+          "Y*": 6
+        },
+        "intersection_pattern": {
+          "E2\u2192R2 inter=1": 76,
+          "E2\u2192R2 inter=2": 88
+        }
+      },
+      "Hard": {
+        "size_change": {
+          "2\u21922": 316,
+          "2\u21920": 123
+        },
+        "kept_position": {},
+        "kept_fret": {},
+        "intersection_pattern": {
+          "E2\u2192R2 inter=2": 302,
+          "E2\u2192R2 inter=1": 14
+        }
+      }
+    },
+    "q3b_single_transposition": {
+      "Easy": {
+        "B\u2192R": 18,
+        "B\u2192Y": 9,
+        "G\u2192G": 8,
+        "B\u2192G": 43,
+        "Y\u2192G": 23,
+        "R\u2192R": 15,
+        "O\u2192Y": 4,
+        "R\u2192G": 4,
+        "Y\u2192Y": 12,
+        "Y\u2192R": 21
+      },
+      "Medium": {
+        "B\u2192Y": 118,
+        "O\u2192B": 13,
+        "G\u2192G": 8,
+        "O\u2192Y": 12,
+        "B\u2192R": 7,
+        "Y\u2192R": 34,
+        "R\u2192G": 4,
+        "R\u2192R": 18,
+        "R\u2192Y": 16,
+        "Y\u2192Y": 32,
+        "B\u2192B": 5
+      },
+      "Hard": {
+        "B\u2192B": 152,
+        "R\u2192R": 95,
+        "O\u2192O": 95,
+        "G\u2192G": 9,
+        "Y\u2192Y": 109,
+        "Y\u2192B": 3,
+        "R\u2192Y": 27
+      }
+    },
+    "q4_sustain": {
+      "Easy": {
+        "<1/16": {
+          "total": 487,
+          "dropped": 416,
+          "kept_hit": 13,
+          "kept_sustain": 58
+        },
+        "1/16-1/8": {
+          "total": 1082,
+          "dropped": 893,
+          "kept_hit": 0,
+          "kept_sustain": 189
+        },
+        "1/8-1/4": {
+          "total": 19,
+          "dropped": 10,
+          "kept_hit": 3,
+          "kept_sustain": 6
+        },
+        "1/4-1/2": {
+          "total": 2,
+          "dropped": 2,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Medium": {
+        "<1/16": {
+          "total": 487,
+          "dropped": 352,
+          "kept_hit": 50,
+          "kept_sustain": 85
+        },
+        "1/16-1/8": {
+          "total": 1082,
+          "dropped": 758,
+          "kept_hit": 6,
+          "kept_sustain": 318
+        },
+        "1/8-1/4": {
+          "total": 19,
+          "dropped": 0,
+          "kept_hit": 6,
+          "kept_sustain": 13
+        },
+        "1/4-1/2": {
+          "total": 2,
+          "dropped": 1,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Hard": {
+        "<1/16": {
+          "total": 487,
+          "dropped": 281,
+          "kept_hit": 206,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 1082,
+          "dropped": 503,
+          "kept_hit": 23,
+          "kept_sustain": 556
+        },
+        "1/8-1/4": {
+          "total": 19,
+          "dropped": 0,
+          "kept_hit": 9,
+          "kept_sustain": 10
+        },
+        "1/4-1/2": {
+          "total": 2,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 2
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      }
+    }
+  },
+  "Chop Suey": {
+    "q1_subset": {
+      "Easy": {
+        "total": 273,
+        "in_expert": 273,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Medium": {
+        "total": 471,
+        "in_expert": 471,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Hard": {
+        "total": 800,
+        "in_expert": 799,
+        "only_in_diff": 1,
+        "example_orphans": [
+          168720
+        ]
+      }
+    },
+    "q2_density_by_beat": {
+      "Easy": {
+        "sub0": [
+          265,
+          361,
+          0.734
+        ],
+        "sub1": [
+          0,
+          222,
+          0.0
+        ],
+        "sub2": [
+          8,
+          263,
+          0.03
+        ],
+        "sub3": [
+          0,
+          206,
+          0.0
+        ]
+      },
+      "Medium": {
+        "sub0": [
+          354,
+          361,
+          0.981
+        ],
+        "sub1": [
+          5,
+          222,
+          0.023
+        ],
+        "sub2": [
+          104,
+          263,
+          0.395
+        ],
+        "sub3": [
+          8,
+          206,
+          0.039
+        ]
+      },
+      "Hard": {
+        "sub0": [
+          359,
+          361,
+          0.994
+        ],
+        "sub1": [
+          122,
+          222,
+          0.55
+        ],
+        "sub2": [
+          243,
+          263,
+          0.924
+        ],
+        "sub3": [
+          75,
+          206,
+          0.364
+        ]
+      }
+    },
+    "q3_chord_reduction": {
+      "Easy": {
+        "size_change": {
+          "2\u21921": 89,
+          "2\u21920": 384,
+          "2\u21922": 116
+        },
+        "kept_position": {
+          "lowest": 31,
+          "highest": 1,
+          "transposed_outside": 57
+        },
+        "kept_fret": {
+          "R": 12,
+          "Y": 10,
+          "R*": 35,
+          "G": 10,
+          "G*": 1,
+          "Y*": 21
+        },
+        "intersection_pattern": {
+          "E2\u2192R2 inter=0": 46,
+          "E2\u2192R2 inter=1": 70
+        }
+      },
+      "Medium": {
+        "size_change": {
+          "2\u21921": 156,
+          "2\u21920": 242,
+          "2\u21922": 191
+        },
+        "kept_position": {
+          "highest": 13,
+          "transposed_outside": 31,
+          "lowest": 112
+        },
+        "kept_fret": {
+          "Y": 59,
+          "B*": 5,
+          "B": 45,
+          "R*": 25,
+          "G": 12,
+          "R": 9,
+          "G*": 1
+        },
+        "intersection_pattern": {
+          "E2\u2192R2 inter=0": 116,
+          "E2\u2192R2 inter=1": 75
+        }
+      },
+      "Hard": {
+        "size_change": {
+          "2\u21922": 347,
+          "2\u21920": 15,
+          "2\u21921": 227
+        },
+        "kept_position": {
+          "lowest": 89,
+          "transposed_outside": 62,
+          "highest": 76
+        },
+        "kept_fret": {
+          "R": 18,
+          "Y": 57,
+          "G*": 1,
+          "G": 14,
+          "B*": 61,
+          "O": 76
+        },
+        "intersection_pattern": {
+          "E2\u2192R2 inter=2": 343,
+          "E2\u2192R2 inter=1": 4
+        }
+      }
+    },
+    "q3b_single_transposition": {
+      "Easy": {
+        "B\u2192R": 7,
+        "O\u2192Y": 15,
+        "Y\u2192R": 15,
+        "R\u2192G": 3,
+        "R\u2192R": 8,
+        "G\u2192G": 14,
+        "G\u2192R": 2,
+        "Y\u2192G": 4
+      },
+      "Medium": {
+        "B\u2192Y": 7,
+        "R\u2192R": 21,
+        "O\u2192B": 23,
+        "Y\u2192Y": 25,
+        "G\u2192G": 32,
+        "G\u2192R": 12,
+        "Y\u2192R": 4
+      },
+      "Hard": {
+        "B\u2192Y": 3,
+        "R\u2192R": 49,
+        "O\u2192B": 31,
+        "Y\u2192Y": 54,
+        "G\u2192G": 58,
+        "B\u2192B": 8,
+        "O\u2192O": 4
+      }
+    },
+    "q4_sustain": {
+      "Easy": {
+        "<1/16": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 1004,
+          "dropped": 779,
+          "kept_hit": 0,
+          "kept_sustain": 225
+        },
+        "1/8-1/4": {
+          "total": 23,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 23
+        },
+        "1/4-1/2": {
+          "total": 23,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 23
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        }
+      },
+      "Medium": {
+        "<1/16": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 1004,
+          "dropped": 581,
+          "kept_hit": 0,
+          "kept_sustain": 423
+        },
+        "1/8-1/4": {
+          "total": 23,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 23
+        },
+        "1/4-1/2": {
+          "total": 23,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 23
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        }
+      },
+      "Hard": {
+        "<1/16": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 1004,
+          "dropped": 253,
+          "kept_hit": 0,
+          "kept_sustain": 751
+        },
+        "1/8-1/4": {
+          "total": 23,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 23
+        },
+        "1/4-1/2": {
+          "total": 23,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 23
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        }
+      }
+    }
+  },
+  "Hypnotize": {
+    "q1_subset": {
+      "Easy": {
+        "total": 117,
+        "in_expert": 117,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Medium": {
+        "total": 234,
+        "in_expert": 234,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Hard": {
+        "total": 410,
+        "in_expert": 410,
+        "only_in_diff": 0,
+        "example_orphans": []
+      }
+    },
+    "q2_density_by_beat": {
+      "Easy": {
+        "sub0": [
+          117,
+          241,
+          0.485
+        ],
+        "sub1": [
+          0,
+          152,
+          0.0
+        ],
+        "sub2": [
+          0,
+          184,
+          0.0
+        ],
+        "sub3": [
+          0,
+          179,
+          0.0
+        ]
+      },
+      "Medium": {
+        "sub0": [
+          226,
+          241,
+          0.938
+        ],
+        "sub1": [
+          0,
+          152,
+          0.0
+        ],
+        "sub2": [
+          8,
+          184,
+          0.043
+        ],
+        "sub3": [
+          0,
+          179,
+          0.0
+        ]
+      },
+      "Hard": {
+        "sub0": [
+          226,
+          241,
+          0.938
+        ],
+        "sub1": [
+          8,
+          152,
+          0.053
+        ],
+        "sub2": [
+          172,
+          184,
+          0.935
+        ],
+        "sub3": [
+          4,
+          179,
+          0.022
+        ]
+      }
+    },
+    "q3_chord_reduction": {
+      "Easy": {
+        "size_change": {
+          "2\u21920": 205,
+          "2\u21921": 55
+        },
+        "kept_position": {
+          "transposed_outside": 4,
+          "lowest": 51
+        },
+        "kept_fret": {
+          "R*": 1,
+          "G": 42,
+          "R": 6,
+          "Y": 3,
+          "G*": 3
+        },
+        "intersection_pattern": {}
+      },
+      "Medium": {
+        "size_change": {
+          "2\u21921": 3,
+          "2\u21920": 151,
+          "2\u21922": 106
+        },
+        "kept_position": {
+          "transposed_outside": 2,
+          "lowest": 1
+        },
+        "kept_fret": {
+          "Y*": 1,
+          "R*": 1,
+          "G": 1
+        },
+        "intersection_pattern": {
+          "E2\u2192R2 inter=1": 90,
+          "E2\u2192R2 inter=0": 11,
+          "E2\u2192R2 inter=2": 5
+        }
+      },
+      "Hard": {
+        "size_change": {
+          "2\u21921": 6,
+          "2\u21922": 164,
+          "2\u21920": 90
+        },
+        "kept_position": {
+          "highest": 6
+        },
+        "kept_fret": {
+          "B": 2,
+          "Y": 2,
+          "R": 2
+        },
+        "intersection_pattern": {
+          "E2\u2192R2 inter=2": 164
+        }
+      }
+    },
+    "q3b_single_transposition": {
+      "Easy": {
+        "Y\u2192G": 11,
+        "B\u2192R": 14,
+        "O\u2192Y": 9,
+        "R\u2192Y": 4,
+        "B\u2192Y": 6,
+        "R\u2192G": 3,
+        "Y\u2192R": 4,
+        "G\u2192G": 3,
+        "O\u2192B": 2,
+        "G\u2192Y": 2,
+        "O\u2192O": 1
+      },
+      "Medium": {
+        "Y\u2192R": 18,
+        "B\u2192Y": 35,
+        "O\u2192B": 10,
+        "R\u2192G": 11,
+        "B\u2192R": 4,
+        "O\u2192Y": 4,
+        "B\u2192G": 7,
+        "Y\u2192B": 5,
+        "O\u2192R": 4,
+        "R\u2192B": 4,
+        "Y\u2192Y": 11,
+        "B\u2192B": 3,
+        "R\u2192R": 3,
+        "G\u2192G": 5,
+        "O\u2192O": 1
+      },
+      "Hard": {
+        "Y\u2192R": 12,
+        "B\u2192Y": 24,
+        "O\u2192B": 6,
+        "R\u2192G": 12,
+        "B\u2192R": 16,
+        "O\u2192Y": 16,
+        "Y\u2192O": 8,
+        "R\u2192O": 8,
+        "Y\u2192B": 8,
+        "O\u2192O": 14,
+        "B\u2192B": 36,
+        "Y\u2192Y": 45,
+        "R\u2192R": 24,
+        "B\u2192G": 6,
+        "G\u2192G": 5
+      }
+    },
+    "q4_sustain": {
+      "Easy": {
+        "<1/16": {
+          "total": 64,
+          "dropped": 62,
+          "kept_hit": 0,
+          "kept_sustain": 2
+        },
+        "1/16-1/8": {
+          "total": 646,
+          "dropped": 558,
+          "kept_hit": 0,
+          "kept_sustain": 88
+        },
+        "1/8-1/4": {
+          "total": 39,
+          "dropped": 18,
+          "kept_hit": 0,
+          "kept_sustain": 21
+        },
+        "1/4-1/2": {
+          "total": 5,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 5
+        },
+        "1/2-1": {
+          "total": 1,
+          "dropped": 1,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Medium": {
+        "<1/16": {
+          "total": 64,
+          "dropped": 53,
+          "kept_hit": 4,
+          "kept_sustain": 7
+        },
+        "1/16-1/8": {
+          "total": 646,
+          "dropped": 468,
+          "kept_hit": 0,
+          "kept_sustain": 178
+        },
+        "1/8-1/4": {
+          "total": 39,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 39
+        },
+        "1/4-1/2": {
+          "total": 5,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 5
+        },
+        "1/2-1": {
+          "total": 1,
+          "dropped": 1,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Hard": {
+        "<1/16": {
+          "total": 64,
+          "dropped": 46,
+          "kept_hit": 6,
+          "kept_sustain": 12
+        },
+        "1/16-1/8": {
+          "total": 646,
+          "dropped": 299,
+          "kept_hit": 0,
+          "kept_sustain": 347
+        },
+        "1/8-1/4": {
+          "total": 39,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 39
+        },
+        "1/4-1/2": {
+          "total": 5,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 5
+        },
+        "1/2-1": {
+          "total": 1,
+          "dropped": 1,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      }
+    }
+  },
+  "Spiders": {
+    "q1_subset": {
+      "Easy": {
+        "total": 191,
+        "in_expert": 191,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Medium": {
+        "total": 317,
+        "in_expert": 317,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Hard": {
+        "total": 543,
+        "in_expert": 543,
+        "only_in_diff": 0,
+        "example_orphans": []
+      }
+    },
+    "q2_density_by_beat": {
+      "Easy": {
+        "sub0": [
+          158,
+          324,
+          0.488
+        ],
+        "sub1": [
+          0,
+          33,
+          0.0
+        ],
+        "sub2": [
+          33,
+          257,
+          0.128
+        ],
+        "sub3": [
+          0,
+          39,
+          0.0
+        ]
+      },
+      "Medium": {
+        "sub0": [
+          257,
+          324,
+          0.793
+        ],
+        "sub1": [
+          0,
+          33,
+          0.0
+        ],
+        "sub2": [
+          60,
+          257,
+          0.233
+        ],
+        "sub3": [
+          0,
+          39,
+          0.0
+        ]
+      },
+      "Hard": {
+        "sub0": [
+          320,
+          324,
+          0.988
+        ],
+        "sub1": [
+          0,
+          33,
+          0.0
+        ],
+        "sub2": [
+          223,
+          257,
+          0.868
+        ],
+        "sub3": [
+          0,
+          39,
+          0.0
+        ]
+      }
+    },
+    "q3_chord_reduction": {
+      "Easy": {
+        "size_change": {
+          "3\u21921": 56,
+          "3\u21920": 101,
+          "2\u21921": 120,
+          "2\u21920": 194
+        },
+        "kept_position": {
+          "lowest": 103,
+          "transposed_outside": 73
+        },
+        "kept_fret": {
+          "Y": 48,
+          "R*": 36,
+          "G*": 34,
+          "R": 23,
+          "G": 32,
+          "Y*": 2,
+          "B*": 1
+        },
+        "intersection_pattern": {}
+      },
+      "Medium": {
+        "size_change": {
+          "3\u21922": 97,
+          "3\u21920": 60,
+          "2\u21922": 166,
+          "2\u21920": 148
+        },
+        "kept_position": {},
+        "kept_fret": {},
+        "intersection_pattern": {
+          "E3\u2192R2 inter=2": 97,
+          "E2\u2192R2 inter=1": 136,
+          "E2\u2192R2 inter=0": 30
+        }
+      },
+      "Hard": {
+        "size_change": {
+          "3\u21922": 152,
+          "3\u21920": 5,
+          "2\u21922": 241,
+          "2\u21920": 73
+        },
+        "kept_position": {},
+        "kept_fret": {},
+        "intersection_pattern": {
+          "E3\u2192R2 inter=1": 126,
+          "E2\u2192R2 inter=2": 241,
+          "E3\u2192R2 inter=2": 26
+        }
+      }
+    },
+    "q3b_single_transposition": {
+      "Easy": {
+        "R\u2192R": 4,
+        "Y\u2192Y": 2,
+        "G\u2192G": 2,
+        "G\u2192Y": 1,
+        "R\u2192Y": 3,
+        "Y\u2192O": 2,
+        "G\u2192B": 1
+      },
+      "Medium": {
+        "G\u2192G": 26,
+        "R\u2192Y": 14,
+        "Y\u2192B": 4,
+        "G\u2192R": 6,
+        "G\u2192Y": 1,
+        "Y\u2192O": 3
+      },
+      "Hard": {
+        "G\u2192G": 103,
+        "R\u2192R": 15,
+        "B\u2192B": 12,
+        "Y\u2192Y": 13,
+        "O\u2192O": 6,
+        "G\u2192R": 1
+      }
+    },
+    "q4_sustain": {
+      "Easy": {
+        "<1/16": {
+          "total": 490,
+          "dropped": 404,
+          "kept_hit": 86,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/8-1/4": {
+          "total": 148,
+          "dropped": 56,
+          "kept_hit": 92,
+          "kept_sustain": 0
+        },
+        "1/4-1/2": {
+          "total": 14,
+          "dropped": 2,
+          "kept_hit": 12,
+          "kept_sustain": 0
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        }
+      },
+      "Medium": {
+        "<1/16": {
+          "total": 490,
+          "dropped": 334,
+          "kept_hit": 156,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/8-1/4": {
+          "total": 148,
+          "dropped": 2,
+          "kept_hit": 146,
+          "kept_sustain": 0
+        },
+        "1/4-1/2": {
+          "total": 14,
+          "dropped": 0,
+          "kept_hit": 12,
+          "kept_sustain": 2
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        }
+      },
+      "Hard": {
+        "<1/16": {
+          "total": 490,
+          "dropped": 110,
+          "kept_hit": 380,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/8-1/4": {
+          "total": 148,
+          "dropped": 0,
+          "kept_hit": 148,
+          "kept_sustain": 0
+        },
+        "1/4-1/2": {
+          "total": 14,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 14
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 1,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 1
+        }
+      }
+    }
+  },
+  "Toxicity": {
+    "q1_subset": {
+      "Easy": {
+        "total": 251,
+        "in_expert": 251,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Medium": {
+        "total": 372,
+        "in_expert": 372,
+        "only_in_diff": 0,
+        "example_orphans": []
+      },
+      "Hard": {
+        "total": 610,
+        "in_expert": 610,
+        "only_in_diff": 0,
+        "example_orphans": []
+      }
+    },
+    "q2_density_by_beat": {
+      "Easy": {
+        "sub0": [
+          237,
+          328,
+          0.723
+        ],
+        "sub1": [
+          7,
+          215,
+          0.033
+        ],
+        "sub2": [
+          7,
+          329,
+          0.021
+        ],
+        "sub3": [
+          0,
+          113,
+          0.0
+        ]
+      },
+      "Medium": {
+        "sub0": [
+          244,
+          328,
+          0.744
+        ],
+        "sub1": [
+          20,
+          215,
+          0.093
+        ],
+        "sub2": [
+          108,
+          329,
+          0.328
+        ],
+        "sub3": [
+          0,
+          113,
+          0.0
+        ]
+      },
+      "Hard": {
+        "sub0": [
+          264,
+          328,
+          0.805
+        ],
+        "sub1": [
+          127,
+          215,
+          0.591
+        ],
+        "sub2": [
+          219,
+          329,
+          0.666
+        ],
+        "sub3": [
+          0,
+          113,
+          0.0
+        ]
+      }
+    },
+    "q3_chord_reduction": {
+      "Easy": {
+        "size_change": {
+          "2\u21921": 76,
+          "2\u21920": 158
+        },
+        "kept_position": {
+          "lowest": 76
+        },
+        "kept_fret": {
+          "G": 12,
+          "Y": 32,
+          "R": 32
+        },
+        "intersection_pattern": {}
+      },
+      "Medium": {
+        "size_change": {
+          "2\u21922": 85,
+          "2\u21921": 12,
+          "2\u21920": 137
+        },
+        "kept_position": {
+          "lowest": 12
+        },
+        "kept_fret": {
+          "G": 12
+        },
+        "intersection_pattern": {
+          "E2\u2192R2 inter=2": 12,
+          "E2\u2192R2 inter=1": 73
+        }
+      },
+      "Hard": {
+        "size_change": {
+          "2\u21922": 156,
+          "2\u21920": 78
+        },
+        "kept_position": {},
+        "kept_fret": {},
+        "intersection_pattern": {
+          "E2\u2192R2 inter=2": 156
+        }
+      }
+    },
+    "q3b_single_transposition": {
+      "Easy": {
+        "G\u2192G": 42,
+        "R\u2192R": 25,
+        "B\u2192Y": 26,
+        "Y\u2192R": 22,
+        "R\u2192G": 7,
+        "O\u2192Y": 11,
+        "B\u2192R": 17,
+        "Y\u2192G": 9,
+        "B\u2192G": 16
+      },
+      "Medium": {
+        "G\u2192G": 97,
+        "R\u2192R": 43,
+        "B\u2192Y": 63,
+        "Y\u2192R": 39,
+        "R\u2192G": 6,
+        "O\u2192B": 11,
+        "Y\u2192G": 16
+      },
+      "Hard": {
+        "G\u2192G": 136,
+        "Y\u2192Y": 88,
+        "R\u2192R": 79,
+        "B\u2192B": 89,
+        "O\u2192O": 16,
+        "R\u2192Y": 36,
+        "B\u2192O": 1,
+        "Y\u2192R": 8
+      }
+    },
+    "q4_sustain": {
+      "Easy": {
+        "<1/16": {
+          "total": 963,
+          "dropped": 734,
+          "kept_hit": 229,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/8-1/4": {
+          "total": 22,
+          "dropped": 0,
+          "kept_hit": 22,
+          "kept_sustain": 0
+        },
+        "1/4-1/2": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Medium": {
+        "<1/16": {
+          "total": 963,
+          "dropped": 613,
+          "kept_hit": 350,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/8-1/4": {
+          "total": 22,
+          "dropped": 0,
+          "kept_hit": 22,
+          "kept_sustain": 0
+        },
+        "1/4-1/2": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      },
+      "Hard": {
+        "<1/16": {
+          "total": 963,
+          "dropped": 375,
+          "kept_hit": 588,
+          "kept_sustain": 0
+        },
+        "1/16-1/8": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/8-1/4": {
+          "total": 22,
+          "dropped": 0,
+          "kept_hit": 22,
+          "kept_sustain": 0
+        },
+        "1/4-1/2": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1/2-1": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        "1-2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        },
+        ">2beats": {
+          "total": 0,
+          "dropped": 0,
+          "kept_hit": 0,
+          "kept_sustain": 0
+        }
+      }
+    }
+  }
+}
