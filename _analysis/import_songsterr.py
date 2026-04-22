@@ -408,40 +408,51 @@ def find_guitar_track(src_mid: mido.MidiFile) -> mido.MidiTrack:
 
 def _build_anchor_pairs(ref_mid: mido.MidiFile, src_mid: mido.MidiFile,
                         ref_tm, src_tm, beat_offset_sec: float,
+                        fixed_anchor: "Tuple[float, float] | None" = None,
                         max_gap_sec: float = 0.8) -> List[Tuple[float, float]]:
-    """Constrói pares (src_sec, ref_sec) de correspondência entre onsets da
-    PART GUITAR do ref e onsets das guitarras do src, usando greedy monotônico.
-
-    Cada nota da PART GUITAR ref procura a mais próxima no src (após aplicar
-    offset) dentro de max_gap_sec. Se achar e ainda for temporalmente coerente
-    com pares anteriores, vira âncora."""
-    # Colapsa acordes (Songsterr emite cada corda individualmente)
+    """Constrói pares (src_sec, ref_sec) de correspondência entre onsets.
+       Se `fixed_anchor=(src_sec, ref_sec)` é fornecido, esse par é OBRIGATÓRIO
+       (ancora forte, tipicamente a 1ª drum) — pares guitarra inconsistentes
+       com ele são descartados."""
     ref_onsets = _collapse_chords(
         [tick_to_seconds(t, ref_tm) for t in _part_guitar_tick_onsets(ref_mid)],
         eps=0.03)
     src_onsets = _collapse_chords(
         [tick_to_seconds(t, src_tm) for t in _src_guitar_tick_onsets(src_mid)],
         eps=0.03)
-    if not ref_onsets or not src_onsets: return []
+    if not ref_onsets or not src_onsets:
+        return [fixed_anchor] if fixed_anchor else []
 
     pairs: List[Tuple[float, float]] = []
     src_sorted = sorted(src_onsets)
-    last_src, last_ref = 0.0, beat_offset_sec
     for r in sorted(ref_onsets):
-        expected_src = r - beat_offset_sec  # estimativa: src_sec = ref_sec - offset
-        # Busca src mais próximo à expected_src dentro de ±max_gap
+        expected_src = r - beat_offset_sec
         lo = bisect.bisect_left(src_sorted, expected_src - max_gap_sec)
         hi = bisect.bisect_right(src_sorted, expected_src + max_gap_sec)
         best_s = None; best_d = max_gap_sec + 1
         for j in range(lo, hi):
             s = src_sorted[j]
-            if s <= last_src: continue  # monotônico
             d = abs(s - expected_src)
             if d < best_d: best_d = d; best_s = s
         if best_s is not None:
             pairs.append((best_s, r))
-            last_src, last_ref = best_s, r
-    return pairs
+
+    if fixed_anchor is not None:
+        fs, fr = fixed_anchor
+        # Remove pares 'inconsistentes': um par (s, r) é consistente com (fs, fr)
+        # se o delta (r - s) é próximo do delta fixed (fr - fs) dentro de 1s.
+        fdelta = fr - fs
+        pairs = [(s, r) for s, r in pairs if abs((r - s) - fdelta) < 1.0]
+        # Insere fixed_anchor no lugar correto
+        pairs = [p for p in pairs if p[0] != fs] + [fixed_anchor]
+        pairs.sort()
+
+    # Garante monotonicidade estrita (remove pairs com src_sec duplicado)
+    clean = []
+    for p in pairs:
+        if clean and p[0] <= clean[-1][0]: continue
+        clean.append(p)
+    return clean
 
 
 def _part_guitar_tick_onsets(ref_mid: mido.MidiFile) -> List[int]:
@@ -598,7 +609,9 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
     # Chave usa (tick, pitch) — não só tick — porque várias lanes podem compartilhar
     # o mesmo tick (ex: crash+kick simultâneos, que NÃO é flam).
     dedup_skipped: set = set()          # {(tick, pitch)}
-    flam_snare_second: set = set()      # {(tick, pitch)}
+    # Flam em snare: a 2ª nota vira Y-tom e é POSICIONADA NO MESMO TICK da 1ª
+    # (simultânea = R+Y visualmente, sem delay percebido).
+    flam_snare_second: Dict[Tuple[int, int], int] = {}  # {(tick, pitch) → tick_da_1ª}
     abs_src = 0
     for msg in drum_track:
         abs_src += msg.time
@@ -609,8 +622,9 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
             last = last_tick_by_lane.get(key)
             if last is not None and abs_src - last <= dedup_gap_ticks:
                 if lane_raw == LANE_SNARE:
-                    flam_snare_second.add((abs_src, msg.note))
-                    last_tick_by_lane[key] = abs_src
+                    flam_snare_second[(abs_src, msg.note)] = last
+                    # NÃO atualiza last_tick — para que notas seguintes peguem
+                    # a 1ª como referência (evita cascata de flams).
                 else:
                     dedup_skipped.add((abs_src, msg.note))
             else:
@@ -632,14 +646,18 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
         if ref_mid is not None and os.environ.get("IMPORT_MULTI_ANCHOR") != "0":
             anchor_pairs = _build_anchor_pairs(
                 ref_mid, src_mid, ref_tempo_map, src_tm,
-                beat_offset_sec=(anchor_ref_sec - anchor_src_sec))
-            print(f"  {len(anchor_pairs)} âncoras guitar↔guitar construídas")
+                beat_offset_sec=(anchor_ref_sec - anchor_src_sec),
+                fixed_anchor=(anchor_src_sec, anchor_ref_sec))
+            print(f"  {len(anchor_pairs)} âncoras (incl. fixed em drum início)")
         for msg in drum_track:
             abs_src += msg.time
             if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
                 if (abs_src, msg.note) in dedup_skipped: continue
                 if abs_src / src_tpb < drop_before_src_beat: continue
-                src_sec = tick_to_seconds(abs_src, src_tm)
+                # Flam em snare: a 2ª nota vira Y-tom NO MESMO TICK da 1ª.
+                flam_first_tick = flam_snare_second.get((abs_src, msg.note))
+                abs_src_eff = flam_first_tick if flam_first_tick is not None else abs_src
+                src_sec = tick_to_seconds(abs_src_eff, src_tm)
                 if anchor_pairs:
                     target_sec = _interpolate_time(src_sec, anchor_pairs)
                 else:
@@ -647,7 +665,7 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
                 if target_sec < 0: continue
                 lane, is_cym = _resolve_lane(msg.note)
                 if lane is None: continue
-                if (abs_src, msg.note) in flam_snare_second:
+                if flam_first_tick is not None:
                     lane, is_cym = LANE_YELLOW, False
                 target_tick = _sec_to_tick(target_sec, ref_tempo_map)
                 events_abs.append((target_tick, 96 + lane, lane, is_cym))
@@ -656,13 +674,15 @@ def build_drums_track(src_mid: mido.MidiFile, beat_offset: float,
             abs_src += msg.time
             if msg.type == "note_on" and msg.velocity > 0 and msg.channel == 9:
                 if (abs_src, msg.note) in dedup_skipped: continue
-                src_beat = abs_src / src_tpb
+                flam_first_tick = flam_snare_second.get((abs_src, msg.note))
+                abs_src_eff = flam_first_tick if flam_first_tick is not None else abs_src
+                src_beat = abs_src_eff / src_tpb
                 if src_beat < drop_before_src_beat: continue
                 tgt_beat = src_beat + beat_offset
                 if tgt_beat < 0: continue
                 lane, is_cym = _resolve_lane(msg.note)
                 if lane is None: continue
-                if (abs_src, msg.note) in flam_snare_second:
+                if flam_first_tick is not None:
                     lane, is_cym = LANE_YELLOW, False
                 target_tick = int(round(tgt_beat * target_tpb))
                 events_abs.append((target_tick, 96 + lane, lane, is_cym))
