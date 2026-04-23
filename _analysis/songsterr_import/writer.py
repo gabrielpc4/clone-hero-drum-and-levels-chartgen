@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Tuple
 
 import mido
 
@@ -12,11 +13,19 @@ from .mapping import build_tom_pitch_map, classify_open_hat_mode, resolve_lane
 from .source import select_source_drum_track, track_name
 
 
-def build_drums_track(
+@dataclass
+class MappedDrumEvent:
+    source_tick: int
+    pitch: int
+    lane: int
+    is_cymbal: bool
+
+
+def collect_mapped_drum_events(
     src_mid: mido.MidiFile,
     drop_before_src_beat: float = 0.0,
     dedup_beats: float = 1 / 16,
-) -> mido.MidiTrack:
+) -> list[MappedDrumEvent]:
     src_tpb = src_mid.ticks_per_beat
     drum_selection = select_source_drum_track(src_mid)
     drum_track = drum_selection.track
@@ -72,7 +81,7 @@ def build_drums_track(
         last_note_by_lane[lane_key] = absolute_source_tick
 
     absolute_source_tick = 0
-    mapped_events = []
+    mapped_events: list[MappedDrumEvent] = []
 
     for message in drum_track:
         absolute_source_tick += message.time
@@ -104,13 +113,20 @@ def build_drums_track(
             lane_value = LANE_YELLOW
             is_cymbal = False
 
-        mapped_events.append((source_tick, 96 + lane_value, lane_value, is_cymbal))
+        mapped_events.append(
+            MappedDrumEvent(
+                source_tick=source_tick,
+                pitch=96 + lane_value,
+                lane=lane_value,
+                is_cymbal=is_cymbal,
+            )
+        )
 
     unique_events = []
     seen_events = set()
 
-    for event_value in sorted(mapped_events):
-        event_key = (event_value[0], event_value[2])
+    for event_value in sorted(mapped_events, key=lambda event: (event.source_tick, event.lane, event.pitch)):
+        event_key = (event_value.source_tick, event_value.lane)
 
         if event_key in seen_events:
             continue
@@ -118,13 +134,24 @@ def build_drums_track(
         seen_events.add(event_key)
         unique_events.append(event_value)
 
+    return unique_events
+
+
+def build_part_drums_track(
+    mapped_events: list[MappedDrumEvent],
+    target_tpb: int,
+    tick_mapper: Callable[[int], int],
+) -> mido.MidiTrack:
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name="PART DRUMS", time=0))
     track.append(mido.MetaMessage("text", text="[mix 0 drums0]", time=0))
 
     output_events = []
 
-    for tick_value, pitch_value, lane_value, _ in unique_events:
+    for event_value in mapped_events:
+        tick_value = tick_mapper(event_value.source_tick)
+        pitch_value = event_value.pitch
+        lane_value = event_value.lane
         output_events.append((tick_value, mido.Message("note_on", note=pitch_value, velocity=100, time=0)))
         output_events.append((tick_value + 1, mido.Message("note_off", note=pitch_value, velocity=0, time=0)))
 
@@ -139,7 +166,10 @@ def build_drums_track(
         LANE_GREEN: [],
     }
 
-    for tick_value, _, lane_value, is_cymbal in unique_events:
+    for event_value in mapped_events:
+        tick_value = tick_mapper(event_value.source_tick)
+        lane_value = event_value.lane
+        is_cymbal = event_value.is_cymbal
         if lane_value in tom_ticks_by_lane and not is_cymbal:
             tom_ticks_by_lane[lane_value].append(tick_value)
 
@@ -149,7 +179,7 @@ def build_drums_track(
             output_events.append((tick_value, mido.Message("note_on", note=marker_pitch, velocity=100, time=0)))
             output_events.append(
                 (
-                    tick_value + src_tpb // 8,
+                    tick_value + target_tpb // 8,
                     mido.Message("note_off", note=marker_pitch, velocity=0, time=0),
                 )
             )
@@ -166,6 +196,24 @@ def build_drums_track(
     return track
 
 
+def build_drums_track(
+    src_mid: mido.MidiFile,
+    drop_before_src_beat: float = 0.0,
+    dedup_beats: float = 1 / 16,
+) -> mido.MidiTrack:
+    mapped_events = collect_mapped_drum_events(
+        src_mid,
+        drop_before_src_beat=drop_before_src_beat,
+        dedup_beats=dedup_beats,
+    )
+
+    return build_part_drums_track(
+        mapped_events,
+        target_tpb=src_mid.ticks_per_beat,
+        tick_mapper=lambda source_tick: source_tick,
+    )
+
+
 def first_drum_tick(part_drums_track: mido.MidiTrack) -> Optional[int]:
     absolute_tick = 0
 
@@ -178,11 +226,11 @@ def first_drum_tick(part_drums_track: mido.MidiTrack) -> Optional[int]:
     return None
 
 
-def build_output_midi(src_mid: mido.MidiFile, part_drums_track: mido.MidiTrack) -> mido.MidiFile:
-    output_mid = mido.MidiFile(type=src_mid.type, ticks_per_beat=src_mid.ticks_per_beat)
+def build_output_midi(template_mid: mido.MidiFile, part_drums_track: mido.MidiTrack) -> mido.MidiFile:
+    output_mid = mido.MidiFile(type=template_mid.type, ticks_per_beat=template_mid.ticks_per_beat)
     replaced_drums = False
 
-    for track in src_mid.tracks:
+    for track in template_mid.tracks:
         if track_name(track) == "PART DRUMS":
             output_mid.tracks.append(part_drums_track)
             replaced_drums = True

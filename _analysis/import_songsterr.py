@@ -21,13 +21,25 @@ import mido
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from songsterr_import.pipeline import generate_songsterr_drums
+from parse_chart import load_reference_midi
+from songsterr_import.pipeline import (
+    generate_songsterr_drums,
+    generate_songsterr_drums_aligned_first_note,
+)
 
 
 def main() -> None:
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument("src_mid", help="MIDI externo contendo a bateria")
     argument_parser.add_argument("out_mid", help="onde gravar o MIDI gerado")
+    argument_parser.add_argument(
+        "--ref-path",
+        help="notes.mid ou notes.chart usado como referencia para o mapeamento da primeira nota.",
+    )
+    argument_parser.add_argument(
+        "--audio-path",
+        help="arquivo de audio da musica usado para detectar a primeira subida dramatica.",
+    )
     argument_parser.add_argument(
         "--drop-before-src-beat",
         type=float,
@@ -43,14 +55,38 @@ def main() -> None:
     args = argument_parser.parse_args()
 
     src_mid = mido.MidiFile(args.src_mid)
-    print("Modo simples: preservando tempo original do Songsterr")
+    if (args.ref_path is None) != (args.audio_path is None):
+        raise RuntimeError("Use --ref-path e --audio-path juntos")
+
     print(f"  drop antes de src_beat {args.drop_before_src_beat:.2f}")
 
-    generation_result = generate_songsterr_drums(
-        src_mid,
-        drop_before_src_beat=args.drop_before_src_beat,
-        dedup_beats=args.dedup_beats,
-    )
+    if args.ref_path is not None and args.audio_path is not None:
+        ref_mid = load_reference_midi(args.ref_path)
+        print("Modo simples + alinhamento da primeira nota por audio")
+        generation_result = generate_songsterr_drums_aligned_first_note(
+            src_mid,
+            ref_mid,
+            args.audio_path,
+            drop_before_src_beat=args.drop_before_src_beat,
+            dedup_beats=args.dedup_beats,
+        )
+        if generation_result.alignment is not None:
+            print(
+                f"  subida detectada em {generation_result.alignment.audio_rise.rise_seconds:.3f}s "
+                f"(score={generation_result.alignment.audio_rise.score:.3f})"
+            )
+            print(
+                f"  1a drum src tick={generation_result.alignment.source_first_tick} "
+                f"-> target tick={generation_result.alignment.target_first_tick}"
+            )
+            print(f"  beat offset aplicado={generation_result.alignment.beat_offset:+.3f}")
+    else:
+        print("Modo simples: preservando tempo original do Songsterr")
+        generation_result = generate_songsterr_drums(
+            src_mid,
+            drop_before_src_beat=args.drop_before_src_beat,
+            dedup_beats=args.dedup_beats,
+        )
 
     if generation_result.first_drum_tick is not None:
         print(
