@@ -22,6 +22,7 @@ import mido
 sys.path.insert(0, os.path.dirname(__file__))
 
 from parse_chart import load_reference_midi
+from songsterr_import.context import resolve_import_context
 from songsterr_import.pipeline import (
     generate_songsterr_drums,
     generate_songsterr_drums_aligned_first_note,
@@ -41,6 +42,11 @@ def main() -> None:
         help="arquivo de audio da musica usado para detectar a primeira subida dramatica.",
     )
     argument_parser.add_argument(
+        "--disable-first-note-audio-align",
+        action="store_true",
+        help="desliga o alinhamento automatico da primeira nota pelo audio.",
+    )
+    argument_parser.add_argument(
         "--drop-before-src-beat",
         type=float,
         default=0.0,
@@ -55,18 +61,25 @@ def main() -> None:
     args = argument_parser.parse_args()
 
     src_mid = mido.MidiFile(args.src_mid)
-    if (args.ref_path is None) != (args.audio_path is None):
-        raise RuntimeError("Use --ref-path e --audio-path juntos")
-
     print(f"  drop antes de src_beat {args.drop_before_src_beat:.2f}")
+    import_context = resolve_import_context(
+        src_mid_path=args.src_mid,
+        out_mid_path=args.out_mid,
+        explicit_ref_path=args.ref_path,
+        explicit_audio_path=args.audio_path,
+        disable_first_note_audio_align=args.disable_first_note_audio_align,
+    )
 
-    if args.ref_path is not None and args.audio_path is not None:
-        ref_mid = load_reference_midi(args.ref_path)
+    if import_context.reference_path is not None and import_context.audio_path is not None:
+        ref_mid = load_reference_midi(import_context.reference_path)
         print("Modo simples + alinhamento da primeira nota por audio")
+        if import_context.auto_detected:
+            print(f"  ref detectado automaticamente: {import_context.reference_path}")
+            print(f"  audio detectado automaticamente: {import_context.audio_path}")
         generation_result = generate_songsterr_drums_aligned_first_note(
             src_mid,
             ref_mid,
-            args.audio_path,
+            import_context.audio_path,
             drop_before_src_beat=args.drop_before_src_beat,
             dedup_beats=args.dedup_beats,
         )
@@ -82,6 +95,8 @@ def main() -> None:
             print(f"  beat offset aplicado={generation_result.alignment.beat_offset:+.3f}")
     else:
         print("Modo simples: preservando tempo original do Songsterr")
+        if not args.disable_first_note_audio_align:
+            print("  aviso: sem contexto automatico suficiente para alinhar a primeira nota pelo audio")
         generation_result = generate_songsterr_drums(
             src_mid,
             drop_before_src_beat=args.drop_before_src_beat,
