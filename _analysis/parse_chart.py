@@ -13,6 +13,7 @@ Common markers: 103=SP(rb2)|Solo(rb1 alt), 104=Tap(CH), 105/106=P1/P2 (RB1) or S
 """
 from __future__ import annotations
 import mido
+import re
 from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -148,6 +149,270 @@ def build_tempo_map(mid: mido.MidiFile) -> TempoMap:
         change_seconds=change_seconds,
         tempos=tempo_values,
     )
+
+
+def _append_abs_messages(track: mido.MidiTrack, abs_messages: List[Tuple[int, object]]) -> None:
+    abs_messages.sort(key=lambda item: item[0])
+    last_tick = 0
+
+    for absolute_tick, message in abs_messages:
+        track.append(message.copy(time=absolute_tick - last_tick))
+        last_tick = absolute_tick
+
+    track.append(mido.MetaMessage("end_of_track", time=0))
+
+
+def _parse_chart_sections(chart_text: str) -> Dict[str, List[str]]:
+    sections: Dict[str, List[str]] = {}
+    current_section_name = None
+    inside_section_body = False
+
+    for raw_line in chart_text.splitlines():
+        stripped_line = raw_line.strip()
+
+        if not stripped_line:
+            continue
+
+        if stripped_line.startswith("[") and stripped_line.endswith("]"):
+            current_section_name = stripped_line[1:-1]
+            sections[current_section_name] = []
+            inside_section_body = False
+            continue
+
+        if stripped_line == "{":
+            inside_section_body = True
+            continue
+
+        if stripped_line == "}":
+            inside_section_body = False
+            current_section_name = None
+            continue
+
+        if current_section_name is None or not inside_section_body:
+            continue
+
+        sections[current_section_name].append(stripped_line)
+
+    return sections
+
+
+def _chart_song_resolution(song_lines: List[str]) -> int:
+    for line in song_lines:
+        match = re.match(r'^Resolution\s*=\s*"?(\d+)"?$', line)
+
+        if match is not None:
+            return int(match.group(1))
+
+    return 192
+
+
+def _chart_sync_track(sync_lines: List[str]) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int, int]]]:
+    tempos: List[Tuple[int, int]] = []
+    time_signatures: List[Tuple[int, int, int]] = []
+
+    for line in sync_lines:
+        tempo_match = re.match(r"^(\d+)\s*=\s*B\s+(\d+)$", line)
+
+        if tempo_match is not None:
+            tick_value = int(tempo_match.group(1))
+            bpm_milli = int(tempo_match.group(2))
+            tempo_us_per_beat = int(round(60_000_000_000 / bpm_milli))
+            tempos.append((tick_value, tempo_us_per_beat))
+            continue
+
+        signature_match = re.match(r"^(\d+)\s*=\s*TS\s+(\d+)(?:\s+(\d+))?$", line)
+
+        if signature_match is not None:
+            tick_value = int(signature_match.group(1))
+            numerator_value = int(signature_match.group(2))
+            denominator_power = signature_match.group(3)
+
+            if denominator_power is None:
+                denominator_value = 4
+            else:
+                denominator_value = 2 ** int(denominator_power)
+
+            time_signatures.append((tick_value, numerator_value, denominator_value))
+
+    if not tempos or tempos[0][0] != 0:
+        tempos.insert(0, (0, 500000))
+
+    return tempos, time_signatures
+
+
+def _chart_note_rows(section_lines: List[str]) -> Dict[int, List[Tuple[int, int]]]:
+    notes_by_tick: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
+
+    for line in section_lines:
+        note_match = re.match(r"^(\d+)\s*=\s*N\s+(\d+)\s+(-?\d+)$", line)
+
+        if note_match is None:
+            continue
+
+        tick_value = int(note_match.group(1))
+        note_value = int(note_match.group(2))
+        duration_value = int(note_match.group(3))
+        notes_by_tick[tick_value].append((note_value, duration_value))
+
+    return notes_by_tick
+
+
+def _chart_events(event_lines: List[str]) -> List[Tuple[int, str]]:
+    chart_events: List[Tuple[int, str]] = []
+
+    for line in event_lines:
+        event_match = re.match(r'^(\d+)\s*=\s*E\s+"(.*)"$', line)
+
+        if event_match is None:
+            continue
+
+        chart_events.append((int(event_match.group(1)), event_match.group(2)))
+
+    return chart_events
+
+
+def _chart_guitar_track(expert_single_lines: List[str]) -> mido.MidiTrack:
+    chart_track = mido.MidiTrack()
+    chart_track.append(mido.MetaMessage("track_name", name="PART GUITAR", time=0))
+    abs_messages: List[Tuple[int, object]] = []
+    note_pitch_map = {
+        0: 96,
+        1: 97,
+        2: 98,
+        3: 99,
+        4: 100,
+        5: 101,
+        6: 104,
+        7: 94,
+    }
+
+    for tick_value, note_rows in _chart_note_rows(expert_single_lines).items():
+        for note_value, duration_value in note_rows:
+            midi_pitch = note_pitch_map.get(note_value)
+
+            if midi_pitch is None:
+                continue
+
+            note_length = max(1, duration_value)
+            abs_messages.append((tick_value, mido.Message("note_on", note=midi_pitch, velocity=100, time=0)))
+            abs_messages.append((tick_value + note_length, mido.Message("note_off", note=midi_pitch, velocity=0, time=0)))
+
+    _append_abs_messages(chart_track, abs_messages)
+
+    return chart_track
+
+
+def _chart_drums_track(expert_drums_lines: List[str], ticks_per_beat: int) -> mido.MidiTrack:
+    chart_track = mido.MidiTrack()
+    chart_track.append(mido.MetaMessage("track_name", name="PART DRUMS", time=0))
+    chart_track.append(mido.MetaMessage("text", text="[mix 0 drums0]", time=0))
+    abs_messages: List[Tuple[int, object]] = []
+    notes_by_tick = _chart_note_rows(expert_drums_lines)
+    playable_pitch_map = {
+        0: 96,
+        1: 97,
+        2: 98,
+        3: 99,
+        4: 100,
+        32: 95,
+    }
+    cymbal_marker_map = {
+        2: 66,
+        3: 67,
+        4: 68,
+    }
+    tom_marker_map = {
+        2: 110,
+        3: 111,
+        4: 112,
+    }
+
+    for tick_value, note_rows in notes_by_tick.items():
+        note_values = {note_value for note_value, _ in note_rows}
+
+        for note_value, duration_value in note_rows:
+            midi_pitch = playable_pitch_map.get(note_value)
+
+            if midi_pitch is None:
+                continue
+
+            note_length = max(1, duration_value)
+            abs_messages.append((tick_value, mido.Message("note_on", note=midi_pitch, velocity=100, time=0)))
+            abs_messages.append((tick_value + note_length, mido.Message("note_off", note=midi_pitch, velocity=0, time=0)))
+
+            cymbal_marker = cymbal_marker_map.get(note_value)
+            tom_marker = tom_marker_map.get(note_value)
+
+            if cymbal_marker is not None and tom_marker is not None and cymbal_marker not in note_values:
+                abs_messages.append((tick_value, mido.Message("note_on", note=tom_marker, velocity=100, time=0)))
+                abs_messages.append((tick_value + max(1, ticks_per_beat // 8), mido.Message("note_off", note=tom_marker, velocity=0, time=0)))
+
+    _append_abs_messages(chart_track, abs_messages)
+
+    return chart_track
+
+
+def _chart_events_track(event_lines: List[str]) -> mido.MidiTrack:
+    chart_track = mido.MidiTrack()
+    chart_track.append(mido.MetaMessage("track_name", name="EVENTS", time=0))
+    abs_messages = [
+        (tick_value, mido.MetaMessage("text", text=text_value, time=0))
+        for tick_value, text_value in _chart_events(event_lines)
+    ]
+    _append_abs_messages(chart_track, abs_messages)
+
+    return chart_track
+
+
+def chart_file_to_midi(chart_path: str) -> mido.MidiFile:
+    with open(chart_path, encoding="utf-8") as chart_file:
+        chart_text = chart_file.read()
+
+    sections = _parse_chart_sections(chart_text)
+    ticks_per_beat = _chart_song_resolution(sections.get("Song", []))
+    tempos, time_signatures = _chart_sync_track(sections.get("SyncTrack", []))
+    midi_file = mido.MidiFile(type=1, ticks_per_beat=ticks_per_beat)
+    conductor_track = mido.MidiTrack()
+    abs_messages: List[Tuple[int, object]] = []
+
+    for tick_value, tempo_value in tempos:
+        abs_messages.append((tick_value, mido.MetaMessage("set_tempo", tempo=tempo_value, time=0)))
+
+    for tick_value, numerator_value, denominator_value in time_signatures:
+        abs_messages.append(
+            (
+                tick_value,
+                mido.MetaMessage(
+                    "time_signature",
+                    numerator=numerator_value,
+                    denominator=denominator_value,
+                    clocks_per_click=24,
+                    notated_32nd_notes_per_beat=8,
+                    time=0,
+                ),
+            )
+        )
+
+    _append_abs_messages(conductor_track, abs_messages)
+    midi_file.tracks.append(conductor_track)
+
+    if sections.get("ExpertSingle"):
+        midi_file.tracks.append(_chart_guitar_track(sections["ExpertSingle"]))
+
+    if sections.get("ExpertDrums"):
+        midi_file.tracks.append(_chart_drums_track(sections["ExpertDrums"], ticks_per_beat))
+
+    if sections.get("Events"):
+        midi_file.tracks.append(_chart_events_track(sections["Events"]))
+
+    return midi_file
+
+
+def load_reference_midi(reference_path: str) -> mido.MidiFile:
+    if reference_path.lower().endswith(".chart"):
+        return chart_file_to_midi(reference_path)
+
+    return mido.MidiFile(reference_path)
 
 
 def parse_part(mid: mido.MidiFile, part_name: str) -> Dict[str, Chart]:

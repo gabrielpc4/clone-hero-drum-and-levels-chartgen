@@ -4,7 +4,9 @@
 #
 # Cria duas pastas no Desktop do bottle:
 #   SOAD-oficial/<música>/  → notes.mid original + song.ini + album.jpg
-#   SOAD-gerado/<música>/   → notes.gen.mid renomeado para notes.mid + song.ini + album.jpg
+#   SOAD-gerado/<música>/   → notes.mid apontando para a versão mais recente
+#                              + cópias notes.songsterr-<dd-mm-hh-mm>.mid ou
+#                              notes.gen-<dd-mm-hh-mm>.mid para identificar a sync
 #
 # Áudio (.opus) é deixado de fora (Moonscraper não precisa).
 
@@ -12,6 +14,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 WHISKY_BOTTLES="$HOME/Library/Containers/com.isaacmarovitz.Whisky/Bottles"
+RUN_STAMP="$(date '+%d-%m-%H-%M')"
 
 if [ ! -d "$WHISKY_BOTTLES" ]; then
   echo "❌ Whisky não encontrado em $WHISKY_BOTTLES" >&2
@@ -60,11 +63,29 @@ copy_audio_as_ogg() {
   done
 }
 
+copy_mid_with_timestamp() {
+  local src_mid="$1" dst_folder="$2" plain_name="$3"
+  cp "$src_mid" "$dst_folder/$plain_name.mid"
+  cp "$src_mid" "$dst_folder/$plain_name-$RUN_STAMP.mid"
+}
+
+sanitize_windows_name() {
+  local raw_name="$1"
+  local sanitized_name="$raw_name"
+
+  while [[ "$sanitized_name" == *"." || "$sanitized_name" == *" " ]]; do
+    sanitized_name="${sanitized_name%?}"
+  done
+
+  printf '%s' "$sanitized_name"
+}
+
 count=0
 for src in "$REPO_DIR"/System*/; do
   song_full="$(basename "$src")"
   # Nome curto: tira "System of a Down - " e "(Harmonix)"
   short_name="$(echo "$song_full" | sed -e 's/System of a Down - //' -e 's/ (Harmonix)//')"
+  short_name="$(sanitize_windows_name "$short_name")"
 
   off_dir="$OFICIAL/$short_name"
   gen_dir="$GERADO/$short_name"
@@ -76,11 +97,16 @@ for src in "$REPO_DIR"/System*/; do
   [ -f "$src/album.jpg" ] && cp "$src/album.jpg" "$off_dir/"
   copy_audio_as_ogg "$src" "$off_dir"
 
-  # Gerado (notes.gen.mid renomeado para notes.mid)
-  if [ -f "$src/notes.gen.mid" ]; then
+  # Gerado: prioriza import Songsterr; fallback para notes.gen.mid do reducer.
+  if [ -f "$src/notes.songsterr.mid" ]; then
+    cp "$src/notes.songsterr.mid" "$gen_dir/notes.mid"
+    copy_mid_with_timestamp "$src/notes.songsterr.mid" "$gen_dir" "notes.songsterr"
+    [ -f "$src/notes.gen.mid" ] && copy_mid_with_timestamp "$src/notes.gen.mid" "$gen_dir" "notes.gen"
+  elif [ -f "$src/notes.gen.mid" ]; then
     cp "$src/notes.gen.mid" "$gen_dir/notes.mid"
+    copy_mid_with_timestamp "$src/notes.gen.mid" "$gen_dir" "notes.gen"
   else
-    echo "⚠️  $short_name: notes.gen.mid não existe, gere com 'python3 _analysis/midi_writer.py'"
+    echo "⚠️  $short_name: notes.songsterr.mid e notes.gen.mid não existem"
   fi
   [ -f "$src/song.ini" ]  && cp "$src/song.ini"  "$gen_dir/"
   [ -f "$src/album.jpg" ] && cp "$src/album.jpg" "$gen_dir/"
@@ -96,6 +122,7 @@ if [ -d "$REPO_DIR/custom" ]; then
     [ -d "$src" ] || continue
     song_full="$(basename "$src")"
     short_name="$(echo "$song_full" | sed -e 's/System of a Down - //')"
+    short_name="$(sanitize_windows_name "$short_name")"
     dst="$CUSTOM/$short_name"
     mkdir -p "$dst"
     # Copia todos os arquivos não-opus, e transcoda .opus → .ogg para Moonscraper
@@ -110,6 +137,7 @@ if [ -d "$REPO_DIR/custom" ]; then
 fi
 
 echo "✅ Copiadas $count músicas Harmonix (oficial+gerado) e $custom_count custom."
+echo "🕒 Timestamp desta sync: $RUN_STAMP"
 echo ""
 echo "📂 Caminhos no Mac:"
 echo "    $OFICIAL"
@@ -118,5 +146,6 @@ echo "    $CUSTOM"
 echo ""
 echo "🖱  No Moonscraper (Whisky), abra File → Open File → Desktop:"
 echo "    SOAD-oficial/<música>/notes.mid   (chart oficial Harmonix)"
-echo "    SOAD-gerado/<música>/notes.mid    (chart gerado pelo nosso reducer)"
+echo "    SOAD-gerado/<música>/notes.mid    (atalho para a versão mais recente)"
+echo "    SOAD-gerado/<música>/notes.songsterr-$RUN_STAMP.mid ou notes.gen-$RUN_STAMP.mid"
 echo "    SOAD-custom/<música>/notes.chart  (charts da comunidade)"
