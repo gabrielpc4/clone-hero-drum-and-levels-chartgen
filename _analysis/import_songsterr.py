@@ -26,6 +26,7 @@ from songsterr_import.context import resolve_import_context
 from songsterr_import.pipeline import (
     generate_songsterr_drums,
     generate_songsterr_drums_aligned_first_note,
+    generate_songsterr_drums_synced_to_songsterr_video,
 )
 
 
@@ -40,6 +41,14 @@ def main() -> None:
     argument_parser.add_argument(
         "--audio-path",
         help="arquivo de audio da musica usado para detectar a primeira subida dramatica.",
+    )
+    argument_parser.add_argument(
+        "--songsterr-url",
+        help="URL da pagina do Songsterr usada para sincronizacao completa via video-points.",
+    )
+    argument_parser.add_argument(
+        "--songsterr-video-id",
+        help="videoId especifico do Songsterr/YouTube para usar nos video-points.",
     )
     argument_parser.add_argument(
         "--disable-first-note-audio-align",
@@ -70,7 +79,46 @@ def main() -> None:
         disable_first_note_audio_align=args.disable_first_note_audio_align,
     )
 
-    if import_context.reference_path is not None and import_context.audio_path is not None:
+    if args.songsterr_url is not None:
+        if import_context.reference_path is None:
+            raise RuntimeError(
+                "A sincronizacao completa pelo Songsterr precisa de notes.mid ou notes.chart. "
+                "Passe --ref-path ou deixe o arquivo ao lado do MIDI."
+            )
+
+        ref_mid = load_reference_midi(import_context.reference_path)
+        print("Modo sync completo via Songsterr video-points")
+        if import_context.reference_path is not None and import_context.audio_path is not None and import_context.auto_detected:
+            print(f"  ref detectado automaticamente: {import_context.reference_path}")
+        generation_result = generate_songsterr_drums_synced_to_songsterr_video(
+            src_mid,
+            ref_mid,
+            songsterr_url=args.songsterr_url,
+            preferred_video_id=args.songsterr_video_id,
+            audio_path=import_context.audio_path,
+            drop_before_src_beat=args.drop_before_src_beat,
+            dedup_beats=args.dedup_beats,
+        )
+        if generation_result.video_sync is not None:
+            if import_context.auto_detected:
+                print(f"  audio detectado automaticamente: {import_context.audio_path}")
+            print(
+                f"  songId={generation_result.video_sync.song_id} "
+                f"revisionId={generation_result.video_sync.revision_id} "
+                f"videoId={generation_result.video_sync.video_id}"
+            )
+            print(
+                f"  anchors={generation_result.video_sync.anchor_count} "
+                f"compassos-src={generation_result.video_sync.source_measure_count} "
+                f"offset inicial={generation_result.video_sync.initial_offset_seconds:+.3f}s"
+            )
+            if generation_result.video_sync.first_note_target_seconds is not None:
+                print(
+                    f"  1a nota video={generation_result.video_sync.first_note_target_seconds:.3f}s "
+                    f"-> audio={generation_result.video_sync.first_note_audio_seconds:.3f}s "
+                    f"(offset {generation_result.video_sync.audio_offset_seconds:+.3f}s)"
+                )
+    elif import_context.reference_path is not None and import_context.audio_path is not None:
         ref_mid = load_reference_midi(import_context.reference_path)
         print("Modo simples + alinhamento da primeira nota por audio")
         if import_context.auto_detected:
@@ -106,7 +154,7 @@ def main() -> None:
     if generation_result.first_drum_tick is not None:
         print(
             f"  -> 1a drum: tick={generation_result.first_drum_tick} "
-            f"beat={generation_result.first_drum_tick / src_mid.ticks_per_beat:.2f}"
+            f"beat={generation_result.first_drum_tick / generation_result.output_mid.ticks_per_beat:.2f}"
         )
 
     generation_result.output_mid.save(args.out_mid)

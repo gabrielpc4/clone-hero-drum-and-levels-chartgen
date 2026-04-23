@@ -63,9 +63,6 @@ def resolve_import_context(
     explicit_audio_path: str | None,
     disable_first_note_audio_align: bool,
 ) -> ImportContext:
-    if disable_first_note_audio_align:
-        return ImportContext(reference_path=None, audio_path=None, auto_detected=False)
-
     candidate_dirs = _unique_candidate_dirs(
         explicit_ref_path,
         explicit_audio_path,
@@ -77,17 +74,18 @@ def resolve_import_context(
     audio_path = explicit_audio_path or _first_existing_path(candidate_dirs, AUDIO_FILENAMES)
     auto_detected = explicit_ref_path is None and explicit_audio_path is None and reference_path is not None and audio_path is not None
 
-    if (explicit_ref_path is not None or explicit_audio_path is not None) and (reference_path is None or audio_path is None):
+    if disable_first_note_audio_align:
+        audio_path = None
+        auto_detected = False
+
+    if (explicit_ref_path is not None or explicit_audio_path is not None) and (reference_path is None or (audio_path is None and not disable_first_note_audio_align)):
         raise RuntimeError(
             "Nao foi possivel resolver o contexto de alinhamento por audio. "
             "Passe --ref-path e --audio-path validos ou use --disable-first-note-audio-align."
         )
 
-    if reference_path is None or audio_path is None:
-        return ImportContext(reference_path=None, audio_path=None, auto_detected=False)
-
     return ImportContext(
         reference_path=reference_path,
         audio_path=audio_path,
-        auto_detected=auto_detected,
+        auto_detected=bool(auto_detected and reference_path is not None and audio_path is not None),
     )
