@@ -97,22 +97,20 @@ def generate_songsterr_drums_synced_to_songsterr_video(
     )
     if mapped_events and audio_path is not None:
         reference_tempo_map = build_tempo_map(ref_mid)
-        base_tick_mapper = tick_mapper
         first_source_tick = min(event.source_tick for event in mapped_events)
-        first_target_tick = base_tick_mapper(first_source_tick)
+        first_target_tick = tick_mapper(first_source_tick)
         first_target_seconds = reference_tempo_map.tick_to_seconds(first_target_tick)
         audio_rise = detect_first_dramatic_rise(audio_path)
         audio_offset_seconds = audio_rise.rise_seconds - first_target_seconds
-
-        def tick_mapper_with_audio_offset(source_tick: int) -> int:
-            warped_target_tick = base_tick_mapper(source_tick)
-            warped_target_seconds = reference_tempo_map.tick_to_seconds(warped_target_tick)
-
-            return reference_tempo_map.seconds_to_tick(warped_target_seconds + audio_offset_seconds)
-
-        tick_mapper = tick_mapper_with_audio_offset
-        video_sync.audio_offset_seconds = audio_offset_seconds
-        video_sync.first_note_target_seconds = first_target_seconds
+        tick_mapper, video_sync = build_songsterr_video_tick_mapper(
+            src_mid,
+            ref_mid,
+            songsterr_url=songsterr_url,
+            preferred_video_id=preferred_video_id,
+            audio_offset_seconds=audio_offset_seconds,
+        )
+        adjusted_first_target_tick = tick_mapper(first_source_tick)
+        video_sync.first_note_target_seconds = reference_tempo_map.tick_to_seconds(adjusted_first_target_tick)
         video_sync.first_note_audio_seconds = audio_rise.rise_seconds
 
     part_drums_track = build_part_drums_track(

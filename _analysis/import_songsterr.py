@@ -112,9 +112,10 @@ def main() -> None:
                 f"compassos-src={generation_result.video_sync.source_measure_count} "
                 f"offset inicial={generation_result.video_sync.initial_offset_seconds:+.3f}s"
             )
+            print(f"  anchors snapados na grade={generation_result.video_sync.snapped_anchor_count}")
             if generation_result.video_sync.first_note_target_seconds is not None:
                 print(
-                    f"  1a nota video={generation_result.video_sync.first_note_target_seconds:.3f}s "
+                    f"  1a nota final={generation_result.video_sync.first_note_target_seconds:.3f}s "
                     f"-> audio={generation_result.video_sync.first_note_audio_seconds:.3f}s "
                     f"(offset {generation_result.video_sync.audio_offset_seconds:+.3f}s)"
                 )

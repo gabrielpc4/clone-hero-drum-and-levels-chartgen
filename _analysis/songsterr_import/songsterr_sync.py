@@ -27,6 +27,7 @@ class SongsterrVideoSync:
     audio_offset_seconds: float = 0.0
     first_note_target_seconds: float | None = None
     first_note_audio_seconds: float | None = None
+    snapped_anchor_count: int = 0
 
 
 def _fetch_json(url: str) -> object:
@@ -116,6 +117,119 @@ def _measure_start_ticks(mid: mido.MidiFile) -> list[int]:
     return measure_start_ticks
 
 
+def _half_measure_grid_ticks(mid: mido.MidiFile) -> list[int]:
+    _, time_signatures = read_conductor_track(mid)
+
+    if not time_signatures:
+        time_signatures = [(0, 4, 4)]
+
+    end_tick = max(sum(message.time for message in track) for track in mid.tracks)
+    grid_ticks: list[int] = []
+
+    for signature_index, (signature_tick, numerator_value, denominator_value) in enumerate(time_signatures):
+        if signature_index + 1 < len(time_signatures):
+            next_signature_tick = time_signatures[signature_index + 1][0]
+        else:
+            next_signature_tick = end_tick + 1
+
+        ticks_per_measure = int(mid.ticks_per_beat * numerator_value * (4 / denominator_value))
+        half_measure_ticks = max(1, ticks_per_measure // 2)
+        current_measure_tick = signature_tick
+
+        while current_measure_tick < next_signature_tick:
+            grid_ticks.append(current_measure_tick)
+
+            midpoint_tick = current_measure_tick + half_measure_ticks
+
+            if midpoint_tick < next_signature_tick:
+                grid_ticks.append(midpoint_tick)
+
+            current_measure_tick += ticks_per_measure
+
+    return sorted(set(grid_ticks))
+
+
+def _snap_anchor_ticks_to_grid(
+    raw_target_ticks: list[int],
+    reference_grid_ticks: list[int],
+) -> tuple[list[int], int]:
+    snapped_ticks: list[int] = []
+    snapped_anchor_count = 0
+    minimum_grid_index = 0
+
+    for raw_target_tick in raw_target_ticks:
+        insertion_index = bisect_right(reference_grid_ticks, raw_target_tick, lo=minimum_grid_index)
+        candidate_indices: list[int] = []
+
+        if minimum_grid_index < len(reference_grid_ticks):
+            candidate_indices.append(minimum_grid_index)
+
+        if insertion_index < len(reference_grid_ticks):
+            candidate_indices.append(insertion_index)
+
+        if insertion_index - 1 >= minimum_grid_index:
+            candidate_indices.append(insertion_index - 1)
+
+        best_index = None
+        best_distance = None
+
+        for candidate_index in sorted(set(candidate_indices)):
+            candidate_tick = reference_grid_ticks[candidate_index]
+            candidate_distance = abs(candidate_tick - raw_target_tick)
+
+            if best_distance is None or candidate_distance < best_distance:
+                best_distance = candidate_distance
+                best_index = candidate_index
+
+        if best_index is None:
+            snapped_ticks.append(raw_target_tick)
+            continue
+
+        snapped_tick = reference_grid_ticks[best_index]
+
+        if snapped_tick != raw_target_tick:
+            snapped_anchor_count += 1
+
+        snapped_ticks.append(snapped_tick)
+        minimum_grid_index = best_index + 1
+
+    return snapped_ticks, snapped_anchor_count
+
+
+def _build_tick_anchor_mapper(
+    source_anchor_ticks: list[int],
+    target_anchor_ticks: list[int],
+) -> Callable[[int], int]:
+    if len(source_anchor_ticks) != len(target_anchor_ticks):
+        raise RuntimeError("Os anchors em tick precisam ter o mesmo tamanho")
+
+    if len(source_anchor_ticks) < 2:
+        raise RuntimeError("Sao necessarios pelo menos dois anchors em tick para o warp")
+
+    def map_tick(source_tick: int) -> int:
+        if source_tick <= source_anchor_ticks[0]:
+            return target_anchor_ticks[0] + (source_tick - source_anchor_ticks[0])
+
+        if source_tick >= source_anchor_ticks[-1]:
+            return target_anchor_ticks[-1] + (source_tick - source_anchor_ticks[-1])
+
+        right_index = bisect_right(source_anchor_ticks, source_tick)
+        left_source_tick = source_anchor_ticks[right_index - 1]
+        right_source_tick = source_anchor_ticks[right_index]
+        left_target_tick = target_anchor_ticks[right_index - 1]
+        right_target_tick = target_anchor_ticks[right_index]
+        source_gap_ticks = right_source_tick - left_source_tick
+
+        if source_gap_ticks <= 0:
+            return left_target_tick
+
+        progress_ratio = (source_tick - left_source_tick) / source_gap_ticks
+
+        return int(round(left_target_tick + progress_ratio * (right_target_tick - left_target_tick)))
+
+    return map_tick
+
+
 def _build_seconds_warp(
     source_anchor_seconds: list[float],
     target_anchor_seconds: list[float],
@@ -155,6 +269,7 @@ def build_songsterr_video_tick_mapper(
     ref_mid: mido.MidiFile,
     songsterr_url: str,
     preferred_video_id: str | None = None,
+    audio_offset_seconds: float = 0.0,
 ) -> tuple[Callable[[int], int], SongsterrVideoSync]:
     song_id = parse_song_id(songsterr_url)
     meta_payload = _fetch_json(f"https://www.songsterr.com/api/meta/{song_id}")
@@ -179,24 +294,19 @@ def build_songsterr_video_tick_mapper(
     if not isinstance(video_points, list) or len(video_points) < 2:
         raise RuntimeError("O Songsterr nao retornou pontos suficientes para sincronizacao")
 
-    source_tempo_map = build_tempo_map(src_mid)
     reference_tempo_map = build_tempo_map(ref_mid)
     source_measure_ticks = _measure_start_ticks(src_mid)
-    source_measure_seconds = [source_tempo_map.tick_to_seconds(measure_tick) for measure_tick in source_measure_ticks]
-    usable_anchor_count = min(len(source_measure_seconds), len(video_points))
+    usable_anchor_count = min(len(source_measure_ticks), len(video_points))
 
     if usable_anchor_count < 2:
         raise RuntimeError("Nao foi possivel cruzar os compassos do Songsterr com os video-points")
 
-    source_anchor_seconds = source_measure_seconds[:usable_anchor_count]
-    target_anchor_seconds = [float(point_value) for point_value in video_points[:usable_anchor_count]]
-    warp_seconds = _build_seconds_warp(source_anchor_seconds, target_anchor_seconds)
-
-    def tick_mapper(source_tick: int) -> int:
-        source_seconds = source_tempo_map.tick_to_seconds(source_tick)
-        target_seconds = warp_seconds(source_seconds)
-
-        return reference_tempo_map.seconds_to_tick(target_seconds)
+    source_anchor_ticks = source_measure_ticks[:usable_anchor_count]
+    target_anchor_seconds = [float(point_value) + audio_offset_seconds for point_value in video_points[:usable_anchor_count]]
+    raw_target_anchor_ticks = [reference_tempo_map.seconds_to_tick(target_seconds) for target_seconds in target_anchor_seconds]
+    reference_grid_ticks = _half_measure_grid_ticks(ref_mid)
+    target_anchor_ticks, snapped_anchor_count = _snap_anchor_ticks_to_grid(raw_target_anchor_ticks, reference_grid_ticks)
+    tick_mapper = _build_tick_anchor_mapper(source_anchor_ticks, target_anchor_ticks)
 
     return tick_mapper, SongsterrVideoSync(
         song_id=song_id,
@@ -205,5 +315,7 @@ def build_songsterr_video_tick_mapper(
         feature=video_entry.get("feature"),
         anchor_count=usable_anchor_count,
         source_measure_count=len(source_measure_ticks),
-        initial_offset_seconds=target_anchor_seconds[0] - source_anchor_seconds[0],
+        initial_offset_seconds=float(video_points[0]),
+        audio_offset_seconds=audio_offset_seconds,
+        snapped_anchor_count=snapped_anchor_count,
     )

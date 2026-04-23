@@ -131,6 +131,12 @@ if [ -d "$REPO_DIR/custom" ]; then
       case "$f" in *.opus) continue;; esac
       cp "$f" "$dst/"
     done
+    if [ -f "$src/notes.songsterr.mid" ]; then
+      copy_mid_with_timestamp "$src/notes.songsterr.mid" "$dst" "notes.songsterr"
+    fi
+    if [ -f "$src/notes.gen.mid" ]; then
+      copy_mid_with_timestamp "$src/notes.gen.mid" "$dst" "notes.gen"
+    fi
     copy_audio_as_ogg "$src" "$dst"
     custom_count=$((custom_count + 1))
   done

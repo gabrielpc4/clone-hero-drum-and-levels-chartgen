@@ -6,11 +6,11 @@ import mido
 
 from parse_drums import LANE_BLUE, LANE_GREEN, LANE_YELLOW
 
-from .constants import GM_TO_RB, TOM_PITCHES
+from .constants import GM_TO_RB, TOM_PITCHES, TOM_TO_LANE
 
 
 def build_tom_pitch_map(drum_track: mido.MidiTrack) -> Dict[int, int]:
-    """Mapeia pitches de tom GM para lanes Y/B/G."""
+    """Mapeia toms GM usando o papel nominal de cada pitch."""
     used_pitches = set()
 
     for message in drum_track:
@@ -31,27 +31,10 @@ def build_tom_pitch_map(drum_track: mido.MidiTrack) -> Dict[int, int]:
     if not used_pitches:
         return {}
 
-    sorted_desc = sorted(used_pitches, reverse=True)
-    pitch_to_lane: Dict[int, int] = {}
-    pitch_count = len(sorted_desc)
-
-    if pitch_count == 1:
-        pitch_to_lane[sorted_desc[0]] = LANE_YELLOW
-    elif pitch_count == 2:
-        pitch_to_lane[sorted_desc[0]] = LANE_YELLOW
-        pitch_to_lane[sorted_desc[1]] = LANE_BLUE
-    else:
-        third_size = pitch_count / 3
-
-        for index, pitch_value in enumerate(sorted_desc):
-            if index < round(third_size):
-                pitch_to_lane[pitch_value] = LANE_YELLOW
-            elif index < round(2 * third_size):
-                pitch_to_lane[pitch_value] = LANE_BLUE
-            else:
-                pitch_to_lane[pitch_value] = LANE_GREEN
-
-    return pitch_to_lane
+    return {
+        pitch_value: TOM_TO_LANE[pitch_value]
+        for pitch_value in sorted(used_pitches)
+    }
 
 
 def classify_open_hat_mode(drum_track: mido.MidiTrack) -> bool:

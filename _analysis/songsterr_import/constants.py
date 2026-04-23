@@ -24,5 +24,14 @@ GM_TO_RB: Dict[int, Tuple[int, bool]] = {
     59: (LANE_BLUE, True),
 }
 
-TOM_PITCHES = (41, 43, 45, 47, 48, 50)
+TOM_TO_LANE: Dict[int, int] = {
+    41: LANE_GREEN,
+    43: LANE_GREEN,
+    45: LANE_GREEN,
+    47: LANE_BLUE,
+    48: LANE_YELLOW,
+    50: LANE_YELLOW,
+}
+
+TOM_PITCHES = tuple(TOM_TO_LANE.keys())
 LANE_LETTERS = ["K", "S", "Y", "B", "G"]
