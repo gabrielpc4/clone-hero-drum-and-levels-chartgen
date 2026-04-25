@@ -25,8 +25,14 @@ so fornece a estrutura musical e os anchors de compasso.
 - **Packs Harmonix (oficiais)**: pastas na **raiz do repo** com o padrao
   `System of a Down - <titulo> (Harmonix)/`. Cada musica e uma pasta; dentro
   ficam `notes.mid` e, se existir, `notes.chart`, mais `notes.songsterr.mid` /
-  `notes.gen.mid` apos geracao, `song.ini`, `album.jpg`, audio, etc. O
-  `sync_to_whisky.sh` itera exatamente essas pastas (`System*/`).
+  `notes.songsterr.mid` (e por vezes `notes.songsterr-<dd-mm-hh-mm>.mid` como
+  backup), `song.ini`, `album.jpg`, audio, etc. O `sync_songs.sh` (ver secao 15)
+  toma `notes.songsterr.mid` e publica em `Songs/…/notes.mid`.
+
+- **Jogo (Clone Hero)**: `Songs/<nome da pasta>/` — destino alvo do sync. Cada
+  musica e uma subpasta com `notes.mid` (a chart servida no jogo: copia de
+  `notes.songsterr.mid` na origem), `song.ini`, audio, etc. O sync nao traz
+  `*.mid` / `*.chart` extra da origem, so o `notes.mid` acima.
 
 - **Charts da comunidade (custom)**: `custom/<nome-da-pasta>/`, com a mesma
   ideia de ficheiros por musica (`notes.chart` e/ou `notes.mid` conforme o caso).
@@ -71,7 +77,7 @@ Scripts auxiliares:
 - `src/postprocess_soldier_side_songsterr.py`
 - `src/fix_soldier_side_songsterr_mid.py`
 - `src/generate_measure_debug_songsterr.py`
-- `sync_to_whisky.sh`
+- `sync_songs.sh`
 
 Reducao e geracao de dificuldades:
 
@@ -568,30 +574,31 @@ Depois de qualquer alteracao em codigo **ou documentacao**, o workflow esperado
 e:
 
 1. regenerar a musica ativa
-2. rodar `./sync_to_whisky.sh`
+2. rodar o sync (ver abaixo)
 
 A musica mais recente usada como baseline de trabalho foi `Question!`.
 
-### 14.3 `sync_to_whisky.sh`
+### 14.3 `sync_songs.sh`
 
-A origem no repositorio sao as pastas `System of a Down - … (Harmonix)/` na raiz
-(ver secao 2) e, para customs, tudo o que houver em `custom/*/`.
+O script **exige dois argumentos**: pasta de **origem** (ex.:
+`original/custom/System of a Down - Soil (Wagsii)/` ou a pasta de trabalho na
+raiz) e o **destino sob** `Songs/` (pasta a criar ou reutilizar, ex.:
+`System of a Down - Soil`; tambem se pode passar `Songs/…` e o path e
+normalizado).
 
-Esse script:
+A partir da raiz do repositorio:
 
-- copia oficiais Harmonix para `SOAD-oficial`
-- copia os resultados gerados para `SOAD-gerado`
-- copia customs para `SOAD-custom`
-- converte `.opus` para `.ogg` com cache em `_cache_ogg`
-- cria copias timestampadas como:
-  - `notes.songsterr-<dd-mm-hh-mm>.mid`
-  - `notes.gen-<dd-mm-hh-mm>.mid`
+```bash
+./sync_songs.sh "original/custom/System of a Down - Soil (Wagsii)" "System of a Down - Soil"
+```
 
-No Moonscraper via Whisky, os caminhos importantes sao:
+Comportamento:
 
-- `SOAD-oficial/<musica>/notes.mid`
-- `SOAD-gerado/<musica>/notes.mid`
-- `SOAD-custom/<musica>/notes.chart`
+- Exige `notes.songsterr.mid` na origem e grava `Songs/<pasta>/notes.mid` a
+  partir dele.
+- Copia o **restante** da origem para o destino, **excluindo** todos os
+  `*.mid` e `*.chart` (fica so o `notes.mid` escrito acima).
+- Cria `Songs/<pasta>/` com `mkdir -p` se ainda nao existir.
 
 ## 16. Regras de continuidade para a proxima LLM
 
