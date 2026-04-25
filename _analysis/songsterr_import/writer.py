@@ -31,14 +31,30 @@ def collect_mapped_drum_events(
     src_mid: mido.MidiFile,
     drop_before_src_beat: float = 0.0,
     dedup_beats: float = 1 / 16,
+    minimum_snare_velocity: int | None = None,
 ) -> list[MappedDrumEvent]:
     src_tpb = src_mid.ticks_per_beat
-    drum_selection = select_source_drum_track(src_mid)
+    drum_selection = select_source_drum_track(
+        src_mid,
+        minimum_snare_velocity=minimum_snare_velocity,
+    )
     drum_track = drum_selection.track
-    closed_hat_skips = build_closed_hat_skips(drum_track)
-    open_hat_lane_overrides = build_open_hat_lane_overrides(drum_track)
-    tom_lane_map = build_tom_pitch_map(drum_track)
-    tom_lane_overrides = build_tom_lane_overrides(drum_track)
+    closed_hat_skips = build_closed_hat_skips(
+        drum_track,
+        minimum_snare_velocity=minimum_snare_velocity,
+    )
+    open_hat_lane_overrides = build_open_hat_lane_overrides(
+        drum_track,
+        minimum_snare_velocity=minimum_snare_velocity,
+    )
+    tom_lane_map = build_tom_pitch_map(
+        drum_track,
+        minimum_snare_velocity=minimum_snare_velocity,
+    )
+    tom_lane_overrides = build_tom_lane_overrides(
+        drum_track,
+        minimum_snare_velocity=minimum_snare_velocity,
+    )
 
     display_name = drum_selection.track_name if drum_selection.track_name else "<sem nome>"
     print(
@@ -54,6 +70,7 @@ def collect_mapped_drum_events(
 
     dedup_gap_ticks = int(round(src_tpb * dedup_beats))
     weak_snare_gap_ticks = max(1, src_tpb // 8)
+    should_filter_weak_snares = minimum_snare_velocity is not None
     last_note_by_lane: Dict[Tuple[int, bool], int] = {}
     last_snare_tick_by_pitch: Dict[int, int] = {}
     skipped_flams = set()
@@ -67,7 +84,7 @@ def collect_mapped_drum_events(
         if message.type != "note_on":
             continue
 
-        if not should_keep_source_hit(message.velocity):
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
 
         if message.channel != 9:
@@ -91,7 +108,11 @@ def collect_mapped_drum_events(
         if lane_value == LANE_SNARE:
             previous_same_pitch_tick = last_snare_tick_by_pitch.get(message.note)
 
-            if previous_same_pitch_tick is not None and absolute_source_tick - previous_same_pitch_tick <= weak_snare_gap_ticks:
+            if (
+                should_filter_weak_snares
+                and previous_same_pitch_tick is not None
+                and absolute_source_tick - previous_same_pitch_tick <= weak_snare_gap_ticks
+            ):
                 skipped_weak_snares.add((previous_same_pitch_tick, message.note))
 
             last_snare_tick_by_pitch[message.note] = absolute_source_tick
@@ -101,6 +122,7 @@ def collect_mapped_drum_events(
 
         if previous_tick is not None and absolute_source_tick - previous_tick <= dedup_gap_ticks:
             if lane_value == LANE_SNARE:
+                skipped_weak_snares.discard((previous_tick, message.note))
                 snare_flam_second_to_first[(absolute_source_tick, message.note)] = previous_tick
             else:
                 skipped_flams.add((absolute_source_tick, message.note))
@@ -118,7 +140,7 @@ def collect_mapped_drum_events(
         if message.type != "note_on":
             continue
 
-        if not should_keep_source_hit(message.velocity):
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
 
         if message.channel != 9:
@@ -242,11 +264,13 @@ def build_drums_track(
     src_mid: mido.MidiFile,
     drop_before_src_beat: float = 0.0,
     dedup_beats: float = 1 / 16,
+    minimum_snare_velocity: int | None = None,
 ) -> mido.MidiTrack:
     mapped_events = collect_mapped_drum_events(
         src_mid,
         drop_before_src_beat=drop_before_src_beat,
         dedup_beats=dedup_beats,
+        minimum_snare_velocity=minimum_snare_velocity,
     )
 
     return build_part_drums_track(

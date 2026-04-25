@@ -5,11 +5,27 @@ from typing import Dict, Tuple
 from parse_drums import LANE_BLUE, LANE_GREEN, LANE_KICK, LANE_SNARE, LANE_YELLOW
 
 
-MIN_SOURCE_CH_NOTE_VELOCITY = 75
+DEFAULT_MINIMUM_SNARE_VELOCITY = 75
+SNARE_SOURCE_PITCHES = frozenset({37, 38, 39, 40})
 
 
-def should_keep_source_hit(velocity_value: int) -> bool:
-    return velocity_value >= MIN_SOURCE_CH_NOTE_VELOCITY
+def should_keep_source_hit(
+    note_value: int,
+    velocity_value: int,
+    minimum_snare_velocity: int | None = None,
+) -> bool:
+    if velocity_value <= 0:
+        return False
+
+    # Keep every positive-velocity hit unless the caller explicitly
+    # asks for a minimum snare velocity threshold.
+    if minimum_snare_velocity is None:
+        return True
+
+    if note_value not in SNARE_SOURCE_PITCHES:
+        return True
+
+    return velocity_value >= minimum_snare_velocity
 
 GM_TO_RB: Dict[int, Tuple[int, bool]] = {
     # Choked crashes / china keep the same lane family as their open versions.
@@ -28,7 +44,6 @@ GM_TO_RB: Dict[int, Tuple[int, bool]] = {
     # Snare family, including sidestick and rimshot.
     37: (LANE_SNARE, False),  # Side Stick Snare
     38: (LANE_SNARE, False),  # Snare
-    39: (LANE_SNARE, False),  # Hand Clap / auxiliary snare-like hit
     40: (LANE_SNARE, False),  # Rim Shot Snare / Electric Snare
 
     # Hi-hat family. Open hat can still be overridden contextually.

@@ -19,6 +19,7 @@ from parse_chart import load_reference_midi
 from postprocess_bubbles_songsterr import apply_bubbles_songsterr_postprocess
 from postprocess_soldier_side_songsterr import apply_soldier_side_songsterr_postprocess
 from songsterr_import.context import resolve_import_context
+from songsterr_import.constants import DEFAULT_MINIMUM_SNARE_VELOCITY
 from songsterr_import.measure_marker_sync import DEFAULT_INITIAL_OFFSET_TICKS
 from songsterr_import.pipeline import generate_songsterr_drums_synced_to_measure_markers
 
@@ -60,10 +61,24 @@ def main() -> None:
         default=1 / 16,
         help="pares mesma-lane com gap <= N beats viram R+Y (snare) ou dedup (outros).",
     )
+    argument_parser.add_argument(
+        "--minimum-snare-velocity",
+        type=int,
+        default=None,
+        help=(
+            "ignora apenas caixas com velocity abaixo deste valor; "
+            f"omita para incluir todas, ou passe {DEFAULT_MINIMUM_SNARE_VELOCITY} "
+            "para reativar o filtro antigo."
+        ),
+    )
     args = argument_parser.parse_args()
 
     src_mid = mido.MidiFile(args.src_mid)
     print(f"  drop antes de src_beat {args.drop_before_src_beat:.2f}")
+    if args.minimum_snare_velocity is None:
+        print("  min snare velocity: inclui todas as caixas")
+    else:
+        print(f"  min snare velocity: {args.minimum_snare_velocity}")
     import_context = resolve_import_context(
         src_mid_path=args.src_mid,
         out_mid_path=args.out_mid,
@@ -86,6 +101,7 @@ def main() -> None:
         initial_offset_ticks=args.initial_offset_ticks,
         drop_before_src_beat=args.drop_before_src_beat,
         dedup_beats=args.dedup_beats,
+        minimum_snare_velocity=args.minimum_snare_velocity,
     )
     if generation_result.measure_sync is not None:
         print(
@@ -94,7 +110,10 @@ def main() -> None:
             f"compassos-pareados={generation_result.measure_sync.paired_measure_count}"
         )
         print(f"  compassos divididos em 2x={generation_result.measure_sync.split_measure_count}")
-        print(f"  offset manual={generation_result.measure_sync.initial_offset_ticks:+d} ticks")
+        print(
+            f"  offset manual={generation_result.measure_sync.initial_offset_ticks:+d} ticks "
+            f"(pula {generation_result.measure_sync.initial_measure_offset} compassos da chart)"
+        )
 
     if generation_result.first_drum_tick is not None:
         print(
@@ -109,6 +128,7 @@ def main() -> None:
             src_mid,
             ref_mid,
             initial_offset_ticks=args.initial_offset_ticks,
+            minimum_snare_velocity=args.minimum_snare_velocity,
         )
 
     if _should_run_soldier_side_postprocess(args.src_mid, args.out_mid):

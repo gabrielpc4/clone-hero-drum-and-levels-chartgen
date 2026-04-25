@@ -22,11 +22,13 @@ def generate_songsterr_drums_synced_to_measure_markers(
     initial_offset_ticks: int = 0,
     drop_before_src_beat: float = 0.0,
     dedup_beats: float = 1 / 16,
+    minimum_snare_velocity: int | None = None,
 ) -> GenerationResult:
     mapped_events = collect_mapped_drum_events(
         src_mid,
         drop_before_src_beat=drop_before_src_beat,
         dedup_beats=dedup_beats,
+        minimum_snare_velocity=minimum_snare_velocity,
     )
     tick_mapper, measure_sync = build_measure_marker_tick_mapper(
         src_mid,

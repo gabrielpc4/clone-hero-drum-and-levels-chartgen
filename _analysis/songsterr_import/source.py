@@ -28,22 +28,28 @@ def track_name(track: mido.MidiTrack) -> str:
     return ""
 
 
-def _channel_9_note_count(track: mido.MidiTrack) -> int:
+def _channel_9_note_count(
+    track: mido.MidiTrack,
+    minimum_snare_velocity: int | None = None,
+) -> int:
     return sum(
         1
         for message in track
         if message.type == "note_on"
-        and should_keep_source_hit(message.velocity)
+        and should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity)
         and message.channel == 9
     )
 
 
-def _mapped_drum_note_count(track: mido.MidiTrack) -> int:
+def _mapped_drum_note_count(
+    track: mido.MidiTrack,
+    minimum_snare_velocity: int | None = None,
+) -> int:
     return sum(
         1
         for message in track
         if message.type == "note_on"
-        and should_keep_source_hit(message.velocity)
+        and should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity)
         and message.channel == 9
         and (message.note in GM_TO_RB or message.note in TOM_PITCHES)
     )
@@ -70,11 +76,17 @@ def _is_auxiliary_percussion_track(track_name_value: str) -> bool:
     return "perc" in lower_name or "percussion" in lower_name
 
 
-def select_source_drum_track(src_mid: mido.MidiFile) -> DrumTrackSelection:
+def select_source_drum_track(
+    src_mid: mido.MidiFile,
+    minimum_snare_velocity: int | None = None,
+) -> DrumTrackSelection:
     drum_candidates = []
 
     for track_index, track in enumerate(src_mid.tracks):
-        channel9_hits = _channel_9_note_count(track)
+        channel9_hits = _channel_9_note_count(
+            track,
+            minimum_snare_velocity=minimum_snare_velocity,
+        )
 
         if channel9_hits == 0:
             continue
@@ -82,7 +94,10 @@ def select_source_drum_track(src_mid: mido.MidiFile) -> DrumTrackSelection:
         current_track_name = track_name(track)
         drum_candidates.append(
             (
-                _mapped_drum_note_count(track),
+                _mapped_drum_note_count(
+                    track,
+                    minimum_snare_velocity=minimum_snare_velocity,
+                ),
                 _drum_track_hint_rank(current_track_name),
                 channel9_hits,
                 -track_index,

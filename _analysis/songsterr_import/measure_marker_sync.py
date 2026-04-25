@@ -19,6 +19,7 @@ class MeasureMarkerSync:
     source_measure_count: int
     target_measure_count: int
     paired_measure_count: int
+    initial_measure_offset: int
     initial_offset_seconds: float
     initial_offset_ticks: int
     split_measure_count: int
@@ -108,6 +109,28 @@ def _source_measure_marker_ticks(src_mid: mido.MidiFile) -> list[int]:
         raise RuntimeError("O MIDI fonte nao tem markers MEASURE_n suficientes no track de bateria")
 
     return sorted(set(marker_ticks))
+
+
+def _resolve_initial_target_measure_offset(
+    target_measure_ticks: list[int],
+    initial_offset_ticks: int,
+) -> tuple[int, int]:
+    if initial_offset_ticks <= 0 or len(target_measure_ticks) < 2:
+        return 0, initial_offset_ticks
+
+    remaining_offset_ticks = initial_offset_ticks
+    target_measure_offset = 0
+
+    while target_measure_offset + 1 < len(target_measure_ticks):
+        current_measure_length = target_measure_ticks[target_measure_offset + 1] - target_measure_ticks[target_measure_offset]
+
+        if remaining_offset_ticks < current_measure_length:
+            break
+
+        remaining_offset_ticks -= current_measure_length
+        target_measure_offset += 1
+
+    return target_measure_offset, remaining_offset_ticks
 
 
 def _build_adaptive_measure_anchors(
@@ -204,7 +227,14 @@ def build_measure_marker_tick_mapper(
             reference_tempo_map.seconds_to_tick(shifted_target_seconds) - target_measure_ticks[0]
         )
 
-    shifted_target_measure_ticks = [tick_value + resolved_initial_offset_ticks for tick_value in target_measure_ticks]
+    initial_measure_offset, residual_initial_offset_ticks = _resolve_initial_target_measure_offset(
+        target_measure_ticks,
+        resolved_initial_offset_ticks,
+    )
+    shifted_target_measure_ticks = [
+        tick_value + residual_initial_offset_ticks
+        for tick_value in target_measure_ticks[initial_measure_offset:]
+    ]
     target_tempo_map = build_tempo_map(ref_mid)
     source_anchor_ticks, target_anchor_ticks, consumed_target_measure_count, split_measure_count = _build_adaptive_measure_anchors(
         source_measure_ticks,
@@ -222,6 +252,7 @@ def build_measure_marker_tick_mapper(
         source_measure_count=len(source_measure_ticks),
         target_measure_count=len(target_measure_ticks),
         paired_measure_count=consumed_target_measure_count,
+        initial_measure_offset=initial_measure_offset,
         initial_offset_seconds=initial_offset_seconds,
         initial_offset_ticks=resolved_initial_offset_ticks,
         split_measure_count=split_measure_count,

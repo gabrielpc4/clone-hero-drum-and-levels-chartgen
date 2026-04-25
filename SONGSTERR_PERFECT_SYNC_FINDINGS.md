@@ -182,6 +182,45 @@ That is what keeps the generated drums aligned with:
 - the Clone Hero note highway
 - the visible fretboard measure lines
 
+### Tom mapping also needed explicit Songsterr-aware rules
+
+The tom mapping could not stay as a generic "higher pitch means higher lane" heuristic.
+
+That approach was not reliable enough for Songsterr drums.
+
+The useful base rule became:
+
+- `High Tom` -> `Y`
+- `Mid Tom` -> `B`
+- `Floor Tom` -> `G`
+- `Very Low Tom` -> `G`
+
+For the GM pitches seen in this importer, that meant:
+
+- `48` -> `Y`
+- `47` -> `B`
+- `45`, `43`, `41` -> `G`
+
+But one more nuance was required for low-tom fills.
+
+When Songsterr writes a low fill that is effectively a `Floor Tom` to `Very Low Tom` movement, the Clone Hero chart reads more naturally if it becomes `B -> G`.
+
+So the contextual rule is:
+
+- if a low-tom sequence contains only `Floor Tom` and `Very Low Tom`, map `Floor Tom` to `B` and `Very Low Tom` to `G`
+- if `Floor Tom` and `Very Low Tom` happen together on the same hit, still map them as `B + G`
+- if that low-tom movement starts right after a `Mid Tom` sequence, do not force the extra blue remap; keep the normal low-tom interpretation instead
+
+This distinction matters because:
+
+- isolated low-tom descents feel clearer in Clone Hero as `B -> G`
+- low-tom phrases that are already coming from an upper tom do not need the extra remap and can become visually over-shaped if forced
+
+So the tom solution ended up being:
+
+- fixed nominal Songsterr tom roles
+- plus a small contextual override for isolated `Floor Tom -> Very Low Tom` phrases
+
 ## Best-practice sync recipe
 
 For songs similar to `Lonely Day`, the recommended order is:

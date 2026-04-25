@@ -5,7 +5,7 @@ import argparse
 import mido
 
 from parse_chart import load_reference_midi
-from songsterr_import.constants import should_keep_source_hit
+from songsterr_import.constants import DEFAULT_MINIMUM_SNARE_VELOCITY, should_keep_source_hit
 from songsterr_import.measure_marker_sync import DEFAULT_INITIAL_OFFSET_TICKS, build_measure_marker_tick_mapper
 from songsterr_import.source import select_source_drum_track
 
@@ -229,8 +229,12 @@ def _apply_hat_pattern_corrections(
     absolute_messages: list[tuple[int, mido.Message] | None],
     src_mid: mido.MidiFile,
     tick_mapper,
+    minimum_snare_velocity: int | None = None,
 ) -> None:
-    drum_track = select_source_drum_track(src_mid).track
+    drum_track = select_source_drum_track(
+        src_mid,
+        minimum_snare_velocity=minimum_snare_velocity,
+    ).track
     source_hat_hits: list[tuple[int, int]] = []
     absolute_source_tick = 0
 
@@ -240,7 +244,7 @@ def _apply_hat_pattern_corrections(
         if message.type != "note_on":
             continue
 
-        if not should_keep_source_hit(message.velocity):
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
 
         if message.channel != 9:
@@ -280,6 +284,7 @@ def apply_bubbles_songsterr_postprocess(
     src_mid: mido.MidiFile,
     ref_mid: mido.MidiFile,
     initial_offset_ticks: int = DEFAULT_INITIAL_OFFSET_TICKS,
+    minimum_snare_velocity: int | None = None,
 ) -> mido.MidiFile:
     tick_mapper = _build_tick_mapper(
         src_mid,
@@ -289,7 +294,12 @@ def apply_bubbles_songsterr_postprocess(
     part_drums_track = _find_part_drums_track(output_mid)
     absolute_messages = _absolute_messages(part_drums_track)
     _swap_blue_green_cymbals(absolute_messages)
-    _apply_hat_pattern_corrections(absolute_messages, src_mid, tick_mapper)
+    _apply_hat_pattern_corrections(
+        absolute_messages,
+        src_mid,
+        tick_mapper,
+        minimum_snare_velocity=minimum_snare_velocity,
+    )
     filtered_messages = [item for item in absolute_messages if item is not None]
     rebuilt_track = _rebuild_track_from_absolute_messages(filtered_messages)
 
@@ -307,6 +317,16 @@ def main() -> None:
     argument_parser.add_argument("out_mid")
     argument_parser.add_argument("--ref-path", required=True)
     argument_parser.add_argument("--initial-offset-ticks", type=int, default=DEFAULT_INITIAL_OFFSET_TICKS)
+    argument_parser.add_argument(
+        "--minimum-snare-velocity",
+        type=int,
+        default=None,
+        help=(
+            "ignora apenas caixas com velocity abaixo deste valor; "
+            f"omita para incluir todas, ou passe {DEFAULT_MINIMUM_SNARE_VELOCITY} "
+            "para reativar o filtro antigo."
+        ),
+    )
     args = argument_parser.parse_args()
 
     src_mid = mido.MidiFile(args.src_mid)
@@ -317,6 +337,7 @@ def main() -> None:
         src_mid,
         ref_mid,
         initial_offset_ticks=args.initial_offset_ticks,
+        minimum_snare_velocity=args.minimum_snare_velocity,
     )
     output_mid.save(args.out_mid)
 

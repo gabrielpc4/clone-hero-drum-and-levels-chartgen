@@ -16,7 +16,10 @@ from .constants import (
 )
 
 
-def build_tom_pitch_map(drum_track: mido.MidiTrack) -> Dict[int, int]:
+def build_tom_pitch_map(
+    drum_track: mido.MidiTrack,
+    minimum_snare_velocity: int | None = None,
+) -> Dict[int, int]:
     """Mapeia toms GM usando o papel nominal de cada pitch."""
     used_pitches = set()
 
@@ -24,7 +27,7 @@ def build_tom_pitch_map(drum_track: mido.MidiTrack) -> Dict[int, int]:
         if message.type != "note_on":
             continue
 
-        if not should_keep_source_hit(message.velocity):
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
 
         if message.channel != 9:
@@ -68,7 +71,10 @@ def build_tom_pitch_map(drum_track: mido.MidiTrack) -> Dict[int, int]:
     }
 
 
-def build_tom_lane_overrides(drum_track: mido.MidiTrack) -> Dict[Tuple[int, int], int]:
+def build_tom_lane_overrides(
+    drum_track: mido.MidiTrack,
+    minimum_snare_velocity: int | None = None,
+) -> Dict[Tuple[int, int], int]:
     tom_ticks: list[Tuple[int, list[int]]] = []
     absolute_source_tick = 0
     current_tick = None
@@ -80,7 +86,7 @@ def build_tom_lane_overrides(drum_track: mido.MidiTrack) -> Dict[Tuple[int, int]
         if message.type != "note_on":
             continue
 
-        if not should_keep_source_hit(message.velocity):
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
 
         if message.channel != 9:
@@ -153,7 +159,10 @@ def build_tom_lane_overrides(drum_track: mido.MidiTrack) -> Dict[Tuple[int, int]
     return overrides
 
 
-def build_open_hat_lane_overrides(drum_track: mido.MidiTrack) -> Dict[Tuple[int, int], int]:
+def build_open_hat_lane_overrides(
+    drum_track: mido.MidiTrack,
+    minimum_snare_velocity: int | None = None,
+) -> Dict[Tuple[int, int], int]:
     hat_hits: list[Tuple[int, int]] = []
     absolute_source_tick = 0
 
@@ -163,7 +172,7 @@ def build_open_hat_lane_overrides(drum_track: mido.MidiTrack) -> Dict[Tuple[int,
         if message.type != "note_on":
             continue
 
-        if not should_keep_source_hit(message.velocity):
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
 
         if message.channel != 9:
@@ -210,7 +219,10 @@ def build_open_hat_lane_overrides(drum_track: mido.MidiTrack) -> Dict[Tuple[int,
     return overrides
 
 
-def build_closed_hat_skips(drum_track: mido.MidiTrack) -> set[Tuple[int, int]]:
+def build_closed_hat_skips(
+    drum_track: mido.MidiTrack,
+    minimum_snare_velocity: int | None = None,
+) -> set[Tuple[int, int]]:
     hat_hits: list[Tuple[int, int]] = []
     absolute_source_tick = 0
 
@@ -220,7 +232,7 @@ def build_closed_hat_skips(drum_track: mido.MidiTrack) -> set[Tuple[int, int]]:
         if message.type != "note_on":
             continue
 
-        if not should_keep_source_hit(message.velocity):
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
 
         if message.channel != 9:

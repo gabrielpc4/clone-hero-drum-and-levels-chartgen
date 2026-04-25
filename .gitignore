@@ -33,3 +33,4 @@ venv/
 
 # Backup do parser/análise (geralmente intermediário, regenerável)
 _analysis/__pycache__/
+Whisky Desktop/
