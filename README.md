@@ -18,20 +18,35 @@ Cenario real de producao:
 A verdade temporal final e sempre a chart de referencia. O MIDI do Songsterr
 so fornece a estrutura musical e os anchors de compasso.
 
-## 2. Arquivos canonicos
+## 2. Estrutura atual
+
+O `src` agora esta organizado por responsabilidade:
+
+- `src/songsterr_parsing`
+  - importer principal do Songsterr
+  - pipeline e helpers especificos do Songsterr
+- `src/chart_generation`
+  - parsing de chart e MIDI
+  - escrita do `notes.mid` final
+  - `chart_sync/` com analises de alinhamento e sync
+- `src/difficulty_generation`
+  - geracao de dificuldades faltantes
+  - `difficulty_analysis/` com validacoes e analises auxiliares
+
+## 3. Arquivos canonicos
 
 Pipeline principal:
 
-- `src/parse_chart.py`
-- `src/parse_drums.py`
-- `src/import_songsterr.py`
-- `src/songsterr_import/context.py`
-- `src/songsterr_import/pipeline.py`
-- `src/songsterr_import/measure_marker_sync.py`
-- `src/songsterr_import/source.py`
-- `src/songsterr_import/mapping.py`
-- `src/songsterr_import/writer.py`
-- `src/songsterr_import/constants.py`
+- `src/chart_generation/parse_chart.py`
+- `src/chart_generation/parse_drums.py`
+- `src/songsterr_parsing/import_songsterr.py`
+- `src/songsterr_parsing/songsterr_import/context.py`
+- `src/songsterr_parsing/songsterr_import/pipeline.py`
+- `src/songsterr_parsing/songsterr_import/measure_marker_sync.py`
+- `src/songsterr_parsing/songsterr_import/source.py`
+- `src/songsterr_parsing/songsterr_import/mapping.py`
+- `src/songsterr_parsing/songsterr_import/writer.py`
+- `src/songsterr_parsing/songsterr_import/constants.py`
 
 Scripts auxiliares:
 
@@ -41,18 +56,32 @@ Scripts auxiliares:
 - `src/generate_measure_debug_songsterr.py`
 - `sync_to_whisky.sh`
 
-## 3. Comando de producao
+Reducao e geracao de dificuldades:
+
+- `src/difficulty_generation/reducer.py`
+- `src/difficulty_generation/reducer_drums.py`
+- `src/chart_generation/midi_writer.py`
+
+Analises e debug:
+
+- `src/chart_generation/chart_sync/align.py`
+- `src/chart_generation/chart_sync/align_drums.py`
+- `src/difficulty_generation/difficulty_analysis/validate.py`
+- `src/difficulty_generation/difficulty_analysis/deep_dive.py`
+- `src/difficulty_generation/difficulty_analysis/finer.py`
+
+## 4. Comando de producao
 
 Uso basico:
 
 ```bash
-python3 src/import_songsterr.py "<songsterr.mid>" "<out.mid>"
+python3 src/songsterr_parsing/import_songsterr.py "<songsterr.mid>" "<out.mid>"
 ```
 
 Flags ativas hoje:
 
 ```bash
-python3 src/import_songsterr.py "<songsterr.mid>" "<out.mid>" \
+python3 src/songsterr_parsing/import_songsterr.py "<songsterr.mid>" "<out.mid>" \
   --ref-path "<notes.chart|notes.mid>" \
   --initial-offset-ticks 768 \
   --drop-before-src-beat 0 \
@@ -77,7 +106,7 @@ Auto-deteccao de referencia:
 O importer procura esses arquivos no diretorio do `src_mid`, do `out_mid` e do
 `--ref-path` quando existe. Se nao achar referencia valida, falha com erro.
 
-## 4. Modelo de sync em producao
+## 5. Modelo de sync em producao
 
 O pipeline ativo usa apenas `MEASURE_n`.
 
@@ -151,7 +180,7 @@ O que importa e:
 - os anchors musicais do source
 - o mapa temporal final da chart de referencia
 
-## 5. Selecao da track de bateria
+## 6. Selecao da track de bateria
 
 `select_source_drum_track()` nao escolhe a primeira track do canal 9.
 
@@ -170,7 +199,7 @@ Isso e importante para MIDIs com:
 - duas tracks de bateria
 - uma track principal e outra de acompanhamento/percussao
 
-## 6. Mapeamento atual de notas GM -> CH
+## 7. Mapeamento atual de notas GM -> CH
 
 ### 6.1 Notas mapeadas diretamente
 
@@ -227,7 +256,7 @@ Se uma corrida contem apenas low toms e nao vem de uma sequencia com upper tom
 antes, o maior low tom da corrida vira blue e o menor vira green. Isso deixa
 fills `floor -> very low` mais legiveis no CH.
 
-## 7. Regras atuais de hihat / prato
+## 8. Regras atuais de hihat / prato
 
 ### 7.1 Open hihat
 
@@ -263,7 +292,7 @@ Numa alternancia maior como:
 o open continua yellow e o closed do meio some. Isso evita transformar esse
 padrao em uma parede azul.
 
-## 8. Flam, dedup e filtros de snare
+## 9. Flam, dedup e filtros de snare
 
 ### 8.1 Janela de dedup
 
@@ -324,7 +353,7 @@ Se a flag estiver ativa:
 `note_on` com `velocity == 0` sempre e ignorado. Isso evita confundir note-off
 codado como note-on com hit real.
 
-## 9. Escrita do `PART DRUMS`
+## 10. Escrita do `PART DRUMS`
 
 O writer faz o seguinte:
 
@@ -341,7 +370,7 @@ O track gerado sempre comeca com:
 - `track_name = PART DRUMS`
 - `text = [mix 0 drums0]`
 
-## 10. Scripts especificos por musica
+## 11. Scripts especificos por musica
 
 ### 10.1 Bubbles
 
@@ -415,7 +444,7 @@ Regras atuais:
   - `69888`
 - garante ride blue adicional em `69504`
 
-## 11. Casos reais que definiram a baseline
+## 12. Casos reais que definiram a baseline
 
 ### Lonely Day
 
@@ -452,7 +481,7 @@ Validou:
 - acoplamento entre weak snare e `--minimum-snare-velocity`
 - `Hand Clap` ignorado globalmente
 
-## 12. Status pratico das musicas
+## 13. Status pratico das musicas
 
 Musicas que hoje servem como referencia de robustez do algoritmo:
 
@@ -467,7 +496,7 @@ Status importante para nao assumir errado:
 - `Sugar` -> o usuario ja editou trechos manualmente em certas iteracoes; evitar
   sobrescrever sem pedir
 
-## 13. Ferramentas de debug que valem a pena
+## 14. Ferramentas de debug que valem a pena
 
 ### 13.1 `generate_measure_debug_songsterr.py`
 
@@ -501,7 +530,7 @@ Quando uma musica estranha aparecer:
 Se os `MEASURE_n` baterem com os inicios de compasso reais do source, o source
 esta estruturalmente bom.
 
-## 14. Workflow operacional
+## 15. Workflow operacional
 
 ### 14.1 Sequencia de comandos
 
@@ -542,7 +571,7 @@ No Moonscraper via Whisky, os caminhos importantes sao:
 - `SOAD-gerado/<musica>/notes.mid`
 - `SOAD-custom/<musica>/notes.chart`
 
-## 15. Regras de continuidade para a proxima LLM
+## 16. Regras de continuidade para a proxima LLM
 
 1. Leia este arquivo primeiro.
 2. Preserve o pipeline atual como baseline.
