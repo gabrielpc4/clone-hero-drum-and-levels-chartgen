@@ -1,7 +1,12 @@
 # Clone Hero Files and Folders
 Logs/
 Screenshots/
-*.ini
+profiles.ini
+settings.ini
+badsongs.txt
+DefaultColors.ini
+
+Moonscraper/
 
 
 # Áudio (não vai pro Git — pesado e potencialmente sob copyright)

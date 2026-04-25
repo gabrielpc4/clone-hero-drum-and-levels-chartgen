@@ -10,7 +10,7 @@ alinhando a bateria ao tempo real da chart de referencia.
 
 Cenario real de producao:
 
-- a pasta da musica ja tem `notes.chart` ou `notes.mid` sincronizado ao audio
+- a pasta da musica (ver secao 2) ja tem `notes.chart` ou `notes.mid` sincronizado ao audio
 - normalmente existe `PART GUITAR`, mas nao `PART DRUMS`
 - o Songsterr fornece o MIDI fonte com a bateria em GM no canal 9
 - o resultado final deve ser salvo como `notes.songsterr.mid`
@@ -20,7 +20,24 @@ so fornece a estrutura musical e os anchors de compasso.
 
 ## 2. Estrutura atual
 
-O `src` agora esta organizado por responsabilidade:
+### 2.1 Onde ficam `notes.mid` e `notes.chart` no repositorio
+
+- **Packs Harmonix (oficiais)**: pastas na **raiz do repo** com o padrao
+  `System of a Down - <titulo> (Harmonix)/`. Cada musica e uma pasta; dentro
+  ficam `notes.mid` e, se existir, `notes.chart`, mais `notes.songsterr.mid` /
+  `notes.gen.mid` apos geracao, `song.ini`, `album.jpg`, audio, etc. O
+  `sync_to_whisky.sh` itera exatamente essas pastas (`System*/`).
+
+- **Charts da comunidade (custom)**: `custom/<nome-da-pasta>/`, com a mesma
+  ideia de ficheiros por musica (`notes.chart` e/ou `notes.mid` conforme o caso).
+
+- **Nao** usamos mais o layout antigo `songs/harmonix/…` na raiz deste repo;
+  alguns blocos `if __name__ == "__main__"` em `src/` ainda podem apontar para
+  esse caminho so para debug local — ajuste o `base` se for correr isso aí.
+
+### 2.2 Organizacao do `src`
+
+O `src` esta organizado por responsabilidade:
 
 - `src/songsterr_parsing`
   - importer principal do Songsterr
@@ -103,8 +120,10 @@ Auto-deteccao de referencia:
 - `notes.chart`
 - `notes.mid`
 
-O importer procura esses arquivos no diretorio do `src_mid`, do `out_mid` e do
-`--ref-path` quando existe. Se nao achar referencia valida, falha com erro.
+O importer procura esses ficheiros no diretorio do `src_mid`, do `out_mid` e do
+`--ref-path` quando existe (tipicamente a **mesma pasta** da musica em
+`System of a Down - … (Harmonix)/` ou em `custom/…/`). Se nao achar referencia
+valida, falha com erro.
 
 ## 5. Modelo de sync em producao
 
@@ -554,6 +573,9 @@ e:
 A musica mais recente usada como baseline de trabalho foi `Question!`.
 
 ### 14.3 `sync_to_whisky.sh`
+
+A origem no repositorio sao as pastas `System of a Down - … (Harmonix)/` na raiz
+(ver secao 2) e, para customs, tudo o que houver em `custom/*/`.
 
 Esse script:
 
