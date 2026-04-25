@@ -1,5 +1,8 @@
-songs/
-.cursor/
+# Clone Hero Files and Folders
+Logs/
+Screenshots/
+*.ini
+
 
 # Áudio (não vai pro Git — pesado e potencialmente sob copyright)
 *.opus
@@ -8,6 +11,10 @@ songs/
 *.mp3
 *.flac
 *.m4a
+*.mp4
+*.jpg
+*.webm
+
 
 # Arquivos zip de custom songs (pesados, ficam fora do Git)
 *.zip
@@ -29,6 +36,7 @@ __pycache__/
 venv/
 
 # Editores
+.cursor/
 .vscode/
 .idea/
 *.swp
