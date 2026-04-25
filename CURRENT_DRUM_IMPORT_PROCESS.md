@@ -4,19 +4,15 @@
 
 Generate a `PART DRUMS` Expert track for Clone Hero from an external Songsterr MIDI.
 
-Current scope is intentionally simple:
+Current scope uses a single default sync strategy:
 
-- keep the original Songsterr timing
-- keep the original Songsterr song start
-- do not sync to the reference chart yet
-- focus only on converting drum notes into valid Clone Hero drum lanes
+- read `MEASURE_n` markers from the Songsterr source MIDI
+- read measure starts from the Clone Hero `notes.chart` / `notes.mid`
+- map Songsterr measures onto the reference-chart measures
+- allow a global tick offset on top of that mapping
+- convert the mapped drum notes into valid Clone Hero drum lanes
 
-There is now one optional helper on top of this baseline:
-
-- detect the first strong drum-like rise in the song audio and use it to place the first generated drum note
-- this is still intentionally limited to the **first note only**
-
-This is the current baseline from which future sync improvements should be built.
+This is the active production path now.
 
 ## What The Importer Does Today
 
@@ -32,12 +28,14 @@ It is now only a thin CLI wrapper around small modules in:
 - `_analysis/songsterr_import/writer.py`
 - `_analysis/songsterr_import/pipeline.py`
 
-The importer does **not** read the reference chart anymore.
+The importer now **does** read the reference chart by default.
 
-Exception:
+It tries to auto-detect:
 
-- by default, the importer tries to auto-detect `notes.chart` or `notes.mid` and song audio in the same song folder
-- if both are found, it reads the reference chart only to place the generated drums on the target TPB and uses the song audio only to align the first drum hit
+- `notes.chart`
+- or `notes.mid`
+
+in the same folder as the Songsterr MIDI or output file.
 
 ### Current generation steps
 
@@ -50,17 +48,13 @@ Exception:
   - flam dedup
   - duplicate same-lane cleanup
   - tom marker preservation for Pro Drums
-5. Write a `PART DRUMS` track back into a MIDI that keeps the original Songsterr timing.
-
-### Optional first-note alignment
-
-If the importer can resolve chart reference + song audio:
-
-- the importer detects the first strong drum-like rise in the song audio
-- it aligns the first mapped Songsterr drum hit to that audio rise
-- the rest of the Songsterr drum timing is preserved relative to that first aligned hit
-
-This is still much simpler than the older full-song sync experiments.
+5. Read `MEASURE_n` markers from the source drum track.
+6. Read measure starts from the reference chart tempo/signature map.
+7. Build an adaptive measure-to-measure warp:
+  - normally `1` Songsterr measure -> `1` chart measure
+  - when the durations match better, `1` Songsterr measure -> `2` chart measures
+8. Apply the global tick offset (default `768`).
+9. Write a `PART DRUMS` track back into a MIDI using the reference chart TPB.
 
 ## Important Current Rules
 
@@ -86,8 +80,9 @@ Important current details:
 
 - `35`, `36` -> kick
 - `37` to `40` -> snare
-- `42`, `44` -> yellow cymbal
-- `46` -> yellow or blue cymbal depending on the hi-hat heuristic
+- `42` -> yellow cymbal
+- `44` -> ignored
+- `46` -> yellow by default, with contextual overrides when needed
 - `49`, `52`, `55`, `57` -> green cymbal
 - `51`, `53`, `59` -> blue cymbal
 - `41`, `43`, `45`, `47`, `48`, `50` -> dynamic tom mapping
@@ -101,9 +96,8 @@ Important current details:
 
 In short:
 
-- if the file already uses clear ride pitches often enough, `46` is treated as yellow hi-hat
-- otherwise, if open hi-hats dominate the hi-hat pattern, `46` is also treated as yellow
-- otherwise it is treated as blue
+- `46` is yellow by default
+- some specific patterns can still override it contextually
 
 ### Flam cleanup
 
@@ -124,16 +118,14 @@ The importer preserves Pro Drums tom markers:
 
 ## Deliberate Non-Goals Right Now
 
-The current importer does **not** do any of the following:
+The current importer does **not** use:
 
-- align to the audio of the reference chart
-- align to `PART GUITAR`
-- reconcile different BPM maps
-- reconcile different time signatures like `4/4` vs `6/8`
-- snap to a reference timing grid
-- use manual anchors
+- Songsterr `video-points`
+- audio-based first-note sync
+- per-note snap-to-grid
+- guitar-guided snap
 
-All of that was intentionally removed from the active generation path.
+Those older experimental sync paths were removed from the active generation code.
 
 ## Commands
 
@@ -143,27 +135,27 @@ All of that was intentionally removed from the active generation path.
 python3 _analysis/import_songsterr.py "<songsterr.mid>" "<out.mid>"
 ```
 
+Default behavior:
+
+- auto-detect `notes.chart` / `notes.mid`
+- sync by `MEASURE_n`
+- apply `--initial-offset-ticks 768`
+
 ### Optional cleanup controls
 
 ```bash
 python3 _analysis/import_songsterr.py "<songsterr.mid>" "<out.mid>" \
+  --initial-offset-ticks 960 \
   --drop-before-src-beat 24 \
   --dedup-beats 0.0625
 ```
 
 Current options:
 
+- `--initial-offset-ticks`
 - `--drop-before-src-beat`
 - `--dedup-beats`
 - `--ref-path`
-- `--audio-path`
-- `--disable-first-note-audio-align`
-
-Default behavior:
-
-- try to auto-detect chart reference + audio and align the first note by default
-- use `--ref-path` and `--audio-path` only to override the detected files
-- use `--disable-first-note-audio-align` if you explicitly want to turn this off
 
 There are no legacy sync arguments anymore.
 
@@ -210,7 +202,7 @@ Relevant functions there:
 - `chart_file_to_midi()`
 - `load_reference_midi()`
 
-These are useful for validation and analysis, but they are **not** part of the active importer path anymore.
+These are useful for validation and analysis, and the reference chart is also part of the active importer path now.
 
 ## Sync To Whisky
 

@@ -1,0 +1,11 @@
+---
+description: Avoid parallel execution in this project
+alwaysApply: true
+---
+
+# No Parallel Execution
+
+- Do not run commands in parallel in this project.
+- Prefer sequential execution for shell commands, builds, generation, sync, validation, and any other execution work.
+- Do not launch subagents in parallel if any of them performs execution or other non-readonly work.
+- Only consider parallel work for clearly read-only inspection when there is no execution involved, and prefer sequential work by default.

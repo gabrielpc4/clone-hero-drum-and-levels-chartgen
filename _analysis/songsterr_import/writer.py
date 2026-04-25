@@ -8,8 +8,14 @@ import mido
 
 from parse_drums import LANE_BLUE, LANE_GREEN, LANE_SNARE, LANE_YELLOW
 
-from .constants import LANE_LETTERS
-from .mapping import build_tom_pitch_map, classify_open_hat_mode, resolve_lane
+from .constants import LANE_LETTERS, should_keep_source_hit
+from .mapping import (
+    build_closed_hat_skips,
+    build_open_hat_lane_overrides,
+    build_tom_lane_overrides,
+    build_tom_pitch_map,
+    resolve_lane,
+)
 from .source import select_source_drum_track, track_name
 
 
@@ -29,8 +35,10 @@ def collect_mapped_drum_events(
     src_tpb = src_mid.ticks_per_beat
     drum_selection = select_source_drum_track(src_mid)
     drum_track = drum_selection.track
-    open_hat_yellow = classify_open_hat_mode(drum_track)
+    closed_hat_skips = build_closed_hat_skips(drum_track)
+    open_hat_lane_overrides = build_open_hat_lane_overrides(drum_track)
     tom_lane_map = build_tom_pitch_map(drum_track)
+    tom_lane_overrides = build_tom_lane_overrides(drum_track)
 
     display_name = drum_selection.track_name if drum_selection.track_name else "<sem nome>"
     print(
@@ -38,15 +46,18 @@ def collect_mapped_drum_events(
         f"mapped_hits={drum_selection.mapped_hits} | "
         f"channel9_hits={drum_selection.channel9_hits}"
     )
-    print(f"  Open HH -> {'Y (folgado)' if open_hat_yellow else 'B (ride/accent)'}")
+    print(f"  Open HH -> Y por padrao; B apenas quando isolado entre closed hats")
     print(
         f"  Tom map: "
         f"{[(pitch_value, LANE_LETTERS[lane_value]) for pitch_value, lane_value in sorted(tom_lane_map.items())]}"
     )
 
     dedup_gap_ticks = int(round(src_tpb * dedup_beats))
+    weak_snare_gap_ticks = max(1, src_tpb // 8)
     last_note_by_lane: Dict[Tuple[int, bool], int] = {}
+    last_snare_tick_by_pitch: Dict[int, int] = {}
     skipped_flams = set()
+    skipped_weak_snares = set()
     snare_flam_second_to_first: Dict[Tuple[int, int], int] = {}
     absolute_source_tick = 0
 
@@ -56,16 +67,34 @@ def collect_mapped_drum_events(
         if message.type != "note_on":
             continue
 
-        if message.velocity <= 0:
+        if not should_keep_source_hit(message.velocity):
             continue
 
         if message.channel != 9:
             continue
 
-        lane_value, is_cymbal = resolve_lane(message.note, tom_lane_map, open_hat_yellow)
+        if (absolute_source_tick, message.note) in closed_hat_skips:
+            continue
+
+        overridden_lane_value = tom_lane_overrides.get((absolute_source_tick, message.note))
+
+        if overridden_lane_value is not None:
+            lane_value, is_cymbal = overridden_lane_value, False
+        elif (absolute_source_tick, message.note) in open_hat_lane_overrides:
+            lane_value, is_cymbal = open_hat_lane_overrides[(absolute_source_tick, message.note)], True
+        else:
+            lane_value, is_cymbal = resolve_lane(message.note, tom_lane_map)
 
         if lane_value is None:
             continue
+
+        if lane_value == LANE_SNARE:
+            previous_same_pitch_tick = last_snare_tick_by_pitch.get(message.note)
+
+            if previous_same_pitch_tick is not None and absolute_source_tick - previous_same_pitch_tick <= weak_snare_gap_ticks:
+                skipped_weak_snares.add((previous_same_pitch_tick, message.note))
+
+            last_snare_tick_by_pitch[message.note] = absolute_source_tick
 
         lane_key = (lane_value, is_cymbal)
         previous_tick = last_note_by_lane.get(lane_key)
@@ -89,10 +118,16 @@ def collect_mapped_drum_events(
         if message.type != "note_on":
             continue
 
-        if message.velocity <= 0:
+        if not should_keep_source_hit(message.velocity):
             continue
 
         if message.channel != 9:
+            continue
+
+        if (absolute_source_tick, message.note) in closed_hat_skips:
+            continue
+
+        if (absolute_source_tick, message.note) in skipped_weak_snares:
             continue
 
         if (absolute_source_tick, message.note) in skipped_flams:
@@ -104,7 +139,14 @@ def collect_mapped_drum_events(
         if source_tick / src_tpb < drop_before_src_beat:
             continue
 
-        lane_value, is_cymbal = resolve_lane(message.note, tom_lane_map, open_hat_yellow)
+        overridden_lane_value = tom_lane_overrides.get((absolute_source_tick, message.note))
+
+        if overridden_lane_value is not None:
+            lane_value, is_cymbal = overridden_lane_value, False
+        elif (absolute_source_tick, message.note) in open_hat_lane_overrides:
+            lane_value, is_cymbal = open_hat_lane_overrides[(absolute_source_tick, message.note)], True
+        else:
+            lane_value, is_cymbal = resolve_lane(message.note, tom_lane_map)
 
         if lane_value is None:
             continue

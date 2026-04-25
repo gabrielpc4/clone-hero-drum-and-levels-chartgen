@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import mido
 
-from .constants import GM_TO_RB, TOM_PITCHES
+from .constants import GM_TO_RB, TOM_PITCHES, should_keep_source_hit
 
 
 @dataclass
@@ -33,7 +33,7 @@ def _channel_9_note_count(track: mido.MidiTrack) -> int:
         1
         for message in track
         if message.type == "note_on"
-        and message.velocity > 0
+        and should_keep_source_hit(message.velocity)
         and message.channel == 9
     )
 
@@ -43,7 +43,7 @@ def _mapped_drum_note_count(track: mido.MidiTrack) -> int:
         1
         for message in track
         if message.type == "note_on"
-        and message.velocity > 0
+        and should_keep_source_hit(message.velocity)
         and message.channel == 9
         and (message.note in GM_TO_RB or message.note in TOM_PITCHES)
     )
@@ -62,6 +62,12 @@ def _drum_track_hint_rank(track_name_value: str) -> int:
         return 1
 
     return 0
+
+
+def _is_auxiliary_percussion_track(track_name_value: str) -> bool:
+    lower_name = track_name_value.lower()
+
+    return "perc" in lower_name or "percussion" in lower_name
 
 
 def select_source_drum_track(src_mid: mido.MidiFile) -> DrumTrackSelection:
@@ -87,6 +93,18 @@ def select_source_drum_track(src_mid: mido.MidiFile) -> DrumTrackSelection:
 
     if not drum_candidates:
         raise RuntimeError("Nenhuma track de bateria (canal 9) encontrada")
+
+    has_primary_drum_candidate = any(
+        mapped_hits > 0 and not _is_auxiliary_percussion_track(current_track_name)
+        for mapped_hits, _, _, _, current_track_name, _ in drum_candidates
+    )
+
+    if has_primary_drum_candidate:
+        drum_candidates = [
+            candidate
+            for candidate in drum_candidates
+            if not _is_auxiliary_percussion_track(candidate[4])
+        ]
 
     drum_candidates.sort(reverse=True)
     mapped_hits, _, channel9_hits, _, current_track_name, track = drum_candidates[0]
