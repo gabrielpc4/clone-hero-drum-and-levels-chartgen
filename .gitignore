@@ -1,3 +1,6 @@
+songs/
+.cursor/
+
 # Áudio (não vai pro Git — pesado e potencialmente sob copyright)
 *.opus
 *.ogg
@@ -32,5 +35,4 @@ venv/
 *~
 
 # Backup do parser/análise (geralmente intermediário, regenerável)
-_analysis/__pycache__/
-Whisky Desktop/
+src/__pycache__/

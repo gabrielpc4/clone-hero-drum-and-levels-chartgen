@@ -22,23 +22,23 @@ so fornece a estrutura musical e os anchors de compasso.
 
 Pipeline principal:
 
-- `_analysis/parse_chart.py`
-- `_analysis/parse_drums.py`
-- `_analysis/import_songsterr.py`
-- `_analysis/songsterr_import/context.py`
-- `_analysis/songsterr_import/pipeline.py`
-- `_analysis/songsterr_import/measure_marker_sync.py`
-- `_analysis/songsterr_import/source.py`
-- `_analysis/songsterr_import/mapping.py`
-- `_analysis/songsterr_import/writer.py`
-- `_analysis/songsterr_import/constants.py`
+- `src/parse_chart.py`
+- `src/parse_drums.py`
+- `src/import_songsterr.py`
+- `src/songsterr_import/context.py`
+- `src/songsterr_import/pipeline.py`
+- `src/songsterr_import/measure_marker_sync.py`
+- `src/songsterr_import/source.py`
+- `src/songsterr_import/mapping.py`
+- `src/songsterr_import/writer.py`
+- `src/songsterr_import/constants.py`
 
 Scripts auxiliares:
 
-- `_analysis/postprocess_bubbles_songsterr.py`
-- `_analysis/postprocess_soldier_side_songsterr.py`
-- `_analysis/fix_soldier_side_songsterr_mid.py`
-- `_analysis/generate_measure_debug_songsterr.py`
+- `src/postprocess_bubbles_songsterr.py`
+- `src/postprocess_soldier_side_songsterr.py`
+- `src/fix_soldier_side_songsterr_mid.py`
+- `src/generate_measure_debug_songsterr.py`
 - `sync_to_whisky.sh`
 
 ## 3. Comando de producao
@@ -46,13 +46,13 @@ Scripts auxiliares:
 Uso basico:
 
 ```bash
-python3 _analysis/import_songsterr.py "<songsterr.mid>" "<out.mid>"
+python3 src/import_songsterr.py "<songsterr.mid>" "<out.mid>"
 ```
 
 Flags ativas hoje:
 
 ```bash
-python3 _analysis/import_songsterr.py "<songsterr.mid>" "<out.mid>" \
+python3 src/import_songsterr.py "<songsterr.mid>" "<out.mid>" \
   --ref-path "<notes.chart|notes.mid>" \
   --initial-offset-ticks 768 \
   --drop-before-src-beat 0 \
@@ -345,7 +345,7 @@ O track gerado sempre comeca com:
 
 ### 10.1 Bubbles
 
-`_analysis/postprocess_bubbles_songsterr.py` roda automaticamente quando o path
+`src/postprocess_bubbles_songsterr.py` roda automaticamente quando o path
 de entrada ou saida contem `system of a down - bubbles`.
 
 Ele faz duas coisas:
@@ -379,12 +379,12 @@ Dois caminhos existem para `Soldier Side`.
 
 Arquivo:
 
-- `_analysis/fix_soldier_side_songsterr_mid.py`
+- `src/fix_soldier_side_songsterr_mid.py`
 
 Uso tipico:
 
 ```bash
-python3 _analysis/fix_soldier_side_songsterr_mid.py "<mid_path>" \
+python3 src/fix_soldier_side_songsterr_mid.py "<mid_path>" \
   --original-mid "<backup_original.mid>"
 ```
 
@@ -401,7 +401,7 @@ Esse script **nao** roda automaticamente no importer.
 
 Arquivo:
 
-- `_analysis/postprocess_soldier_side_songsterr.py`
+- `src/postprocess_soldier_side_songsterr.py`
 
 Ele roda automaticamente quando o path contem
 `system of a down - soldier side`.
@@ -480,7 +480,7 @@ Esse script cria um MIDI de debug onde:
 Uso:
 
 ```bash
-python3 _analysis/generate_measure_debug_songsterr.py "<src.mid>" "<out.mid>" \
+python3 src/generate_measure_debug_songsterr.py "<src.mid>" "<out.mid>" \
   --drop-before-src-beat 0 \
   --dedup-beats 0.0625
 ```
@@ -546,7 +546,7 @@ No Moonscraper via Whisky, os caminhos importantes sao:
 
 1. Leia este arquivo primeiro.
 2. Preserve o pipeline atual como baseline.
-3. Antes de criar helper novo, procure em `_analysis/` se ja existe modulo para
+3. Antes de criar helper novo, procure em `src/` se ja existe modulo para
    isso.
 4. Se mexer em sync:
    - teste pelo menos em `Sugar`, `Soil` e `Question!`
