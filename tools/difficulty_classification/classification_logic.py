@@ -673,6 +673,7 @@ def build_classification_report(repo_root: Path) -> dict:
                 "drum_track_name": None if metric_row["drums"] is None else metric_row["drums"]["track_name"],
                 "vocal_track_name": None if metric_row["vocals"] is None else metric_row["vocals"]["track_name"],
                 "diff_guitar": guitar_score,
+                "diff_drums": drum_score,
                 "diff_drums_real": drum_score,
                 "diff_vocals": vocal_score,
                 "drum_metrics": metric_row["drums"],
@@ -729,6 +730,7 @@ def apply_classification_to_song_ini(song_ini_path: Path, guitar_score: int, dru
     difficulty_lines = [f"diff_guitar = {guitar_score}"]
 
     if drum_score is not None:
+        difficulty_lines.append(f"diff_drums = {drum_score}")
         difficulty_lines.append(f"diff_drums_real = {drum_score}")
 
     if vocal_score is not None:
@@ -765,7 +767,7 @@ def report_summary_lines(report: dict) -> List[str]:
     summary_lines.append(f"missing_vocals={len(exceptions['missing_vocals'])}")
     summary_lines.append(f"missing_guitar={len(exceptions['missing_guitar'])}")
 
-    for instrument_key in ["diff_guitar", "diff_drums_real", "diff_vocals"]:
+    for instrument_key in ["diff_guitar", "diff_drums", "diff_drums_real", "diff_vocals"]:
         counts: Dict[str, int] = defaultdict(int)
 
         for row in rows:
