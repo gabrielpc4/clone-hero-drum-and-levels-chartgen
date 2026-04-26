@@ -34,7 +34,7 @@
                 <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="Cymbal" />
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="Cymbal (for +)" />
             <ComboBox x:Name="CymbalComboBox" Grid.Column="1" />
         </Grid>
 
