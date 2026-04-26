@@ -74,6 +74,25 @@ function Get-PreferredAudioSourcePath {
     return $audioFiles[0].FullName
 }
 
+function Resolve-FfmpegExecutablePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RepositoryRootPath
+    )
+
+    $bundledFfmpegPath = Join-Path $RepositoryRootPath "tools\\ffmpeg\\bin\\ffmpeg.exe"
+    if (Test-Path -LiteralPath $bundledFfmpegPath -PathType Leaf) {
+        return $bundledFfmpegPath
+    }
+
+    $ffmpegCommand = Get-Command ffmpeg -ErrorAction SilentlyContinue
+    if ($null -ne $ffmpegCommand) {
+        return $ffmpegCommand.Source
+    }
+
+    return ""
+}
+
 function Ensure-OggAudioInDestination {
     param(
         [Parameter(Mandatory = $true)]
@@ -95,9 +114,9 @@ function Ensure-OggAudioInDestination {
         return
     }
 
-    $ffmpegCommand = Get-Command ffmpeg -ErrorAction SilentlyContinue
-    if ($null -eq $ffmpegCommand) {
-        throw "ffmpeg nao encontrado no PATH. Instale ffmpeg para converter audio em song.ogg."
+    $ffmpegExecutablePath = Resolve-FfmpegExecutablePath -RepositoryRootPath $RepositoryRootPath
+    if ([string]::IsNullOrWhiteSpace($ffmpegExecutablePath)) {
+        throw "ffmpeg nao encontrado. Coloque em tools\\ffmpeg\\bin\\ffmpeg.exe ou configure no PATH."
     }
 
     $cacheRoot = Join-Path $RepositoryRootPath "_cache_ogg"
@@ -108,13 +127,14 @@ function Ensure-OggAudioInDestination {
     if (-not (Test-Path -LiteralPath $cachedOggPath -PathType Leaf)) {
         $arguments = @(
             "-y",
+            "-loglevel", "error",
             "-i", $sourceAudioPath,
             "-vn",
             "-c:a", "libvorbis",
             "-q:a", "5",
             $cachedOggPath
         )
-        & $ffmpegCommand.Source @arguments | Out-Null
+        & $ffmpegExecutablePath @arguments | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "ffmpeg falhou ao converter '$sourceAudioPath' para ogg (exit $LASTEXITCODE)."
         }
