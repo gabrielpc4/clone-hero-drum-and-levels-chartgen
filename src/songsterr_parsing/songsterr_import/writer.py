@@ -339,20 +339,19 @@ def _cymbal_run_includes_expert_snare_in_span(
     return False
 
 
-def _yb_cymbals_to_thin_in_steady_musical_eighth_run(
-    run_segment: list[tuple[int, int]],
+def _yb_cymbals_to_thin_in_run_segment(
+    yb_only: list[tuple[int, int]],
+    has_virtual_at_start: bool,
 ) -> set[tuple[int, int]]:
     """
-    Só 98/99. Pitch 100 (G) fica fora. Bursts de 2+ da *nova* cor: mantém todos, último
-    revira a fase (virtual). Paridade: com virtual, remove 0,2,4; sem, remove 1,3,5
-    (paridade C# + Cymbal tool, mas só em cadeia de 1/8).
+    Só 98/99. Bursts de 2+ da *nova* cor: mantém todos, último revira a fase (virtual).
+    Paridade: com virtual, remove 0,2,4; sem, remove 1,3,5.
     """
     to_remove: set[tuple[int, int]] = set()
-    yb_only: list[tuple[int, int]] = [(t, p) for t, p in run_segment if p in (98, 99)]
     if len(yb_only) < 2:
         return to_remove
 
-    has_virtual = run_segment[0][1] == 100
+    has_virtual = has_virtual_at_start
     yb_index = 0
     k = 0
     while yb_index < len(yb_only):
@@ -376,6 +375,71 @@ def _yb_cymbals_to_thin_in_steady_musical_eighth_run(
             to_remove.add((t0, p0))
         yb_index += 1
         k += 1
+    return to_remove
+
+
+def _yb_cymbals_to_thin_in_steady_musical_eighth_run(
+    run_segment: list[tuple[int, int]],
+) -> set[tuple[int, int]]:
+    """
+    Pitch 100 (G) é imune, mas ainda pode quebrar/reiniciar a fase:
+    - G sozinho em um tick vira âncora virtual para o próximo trecho Y/B.
+    - G junto com Y/B no mesmo tick reinicia a sequência, mas não vira virtual
+      para o Y/B daquele mesmo tick.
+    """
+    to_remove: set[tuple[int, int]] = set()
+    grouped_by_tick: list[tuple[int, list[int]]] = []
+
+    for tick_value, pitch_value in run_segment:
+        if grouped_by_tick and grouped_by_tick[-1][0] == tick_value:
+            grouped_by_tick[-1][1].append(pitch_value)
+            continue
+
+        grouped_by_tick.append((tick_value, [pitch_value]))
+
+    current_chunk: list[tuple[int, int]] = []
+    current_chunk_has_virtual = False
+    next_chunk_has_virtual = False
+
+    def flush_current_chunk() -> None:
+        nonlocal current_chunk
+        nonlocal current_chunk_has_virtual
+        nonlocal to_remove
+
+        if not current_chunk:
+            return
+
+        to_remove |= _yb_cymbals_to_thin_in_run_segment(
+            current_chunk,
+            current_chunk_has_virtual,
+        )
+        current_chunk = []
+        current_chunk_has_virtual = False
+
+    for tick_value, pitches_at_tick in grouped_by_tick:
+        has_green = 100 in pitches_at_tick
+        yb_pitches = [pitch_value for pitch_value in pitches_at_tick if pitch_value in (98, 99)]
+
+        if has_green:
+            flush_current_chunk()
+
+            if yb_pitches:
+                current_chunk_has_virtual = False
+                current_chunk = [(tick_value, pitch_value) for pitch_value in yb_pitches]
+                next_chunk_has_virtual = False
+            else:
+                next_chunk_has_virtual = True
+
+            continue
+
+        if yb_pitches and not current_chunk:
+            current_chunk_has_virtual = next_chunk_has_virtual
+            next_chunk_has_virtual = False
+
+        for pitch_value in yb_pitches:
+            current_chunk.append((tick_value, pitch_value))
+
+    flush_current_chunk()
     return to_remove
 
 
