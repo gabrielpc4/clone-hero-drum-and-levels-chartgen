@@ -39,6 +39,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Lead Vocals | Serj Tankian",
       "diff_guitar": 4,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -89,6 +90,7 @@
       "drum_track_name": "Track 2",
       "vocal_track_name": null,
       "diff_guitar": 1,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": null,
       "drum_metrics": {
@@ -127,6 +129,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Kit | Drums",
       "vocal_track_name": null,
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": null,
       "drum_metrics": {
@@ -165,6 +168,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Lead Vocals | Serj Tankian",
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -215,6 +219,7 @@
       "drum_track_name": "Percussion",
       "vocal_track_name": null,
       "diff_guitar": 2,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": null,
       "drum_metrics": {
@@ -253,6 +258,7 @@
       "drum_track_name": "Drums - John Dolmayan",
       "vocal_track_name": "Lead Vocals - Serj Tankian",
       "diff_guitar": 5,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 1,
       "drum_metrics": {
@@ -303,6 +309,7 @@
       "drum_track_name": "John Dolmayan - Drums",
       "vocal_track_name": "Serj Tankien - Vocals",
       "diff_guitar": 2,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -353,6 +360,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 3,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": null,
       "drum_metrics": {
@@ -391,6 +399,7 @@
       "drum_track_name": "John Dolmayan - Drums",
       "vocal_track_name": null,
       "diff_guitar": 4,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": null,
       "drum_metrics": {
@@ -429,6 +438,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Vocals | Serj Tankian & Daron Malakian",
       "diff_guitar": 4,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -479,6 +489,7 @@
       "drum_track_name": "John Dolmayan ",
       "vocal_track_name": "Vocals (Daron / Serj)",
       "diff_guitar": 5,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 6,
       "drum_metrics": {
@@ -529,6 +540,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 3,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": null,
       "drum_metrics": {
@@ -567,6 +579,7 @@
       "drum_track_name": null,
       "vocal_track_name": "Daron Malakian - Vocals",
       "diff_guitar": 1,
+      "diff_drums": null,
       "diff_drums_real": null,
       "diff_vocals": 2,
       "drum_metrics": null,
@@ -601,6 +614,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 2,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": null,
       "drum_metrics": {
@@ -639,6 +653,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 6,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": null,
       "drum_metrics": {
@@ -677,6 +692,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Lead Vocals-Serj Tankian",
       "diff_guitar": 3,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -727,6 +743,7 @@
       "drum_track_name": "John",
       "vocal_track_name": "Vocals 1 - Serj",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -777,6 +794,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 3,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": null,
       "drum_metrics": {
@@ -815,6 +833,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian - Vocals",
       "diff_guitar": 3,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 6,
       "drum_metrics": {
@@ -865,6 +884,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 4,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": null,
       "drum_metrics": {
@@ -903,6 +923,7 @@
       "drum_track_name": "Drums (regenerated)",
       "vocal_track_name": "Vocals (regenerated)",
       "diff_guitar": 6,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -953,6 +974,7 @@
       "drum_track_name": "Drums - John Dolmayan",
       "vocal_track_name": "Vocals - Serj Tankian",
       "diff_guitar": 4,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1003,6 +1025,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Vocals (Daron and Serj)",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 2,
       "drum_metrics": {
@@ -1053,6 +1076,7 @@
       "drum_track_name": "John Dolmayan | TAMA Starclassic Bubinga | Drums",
       "vocal_track_name": "Serj and Daron | Main Vocals",
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -1103,6 +1127,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian - Vocals",
       "diff_guitar": 4,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 6,
       "drum_metrics": {
@@ -1153,6 +1178,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 4,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": null,
       "drum_metrics": {
@@ -1191,6 +1217,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Vocals | Serj Tankian",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -1241,6 +1268,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian - Lead vocals",
       "diff_guitar": 4,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 6,
       "drum_metrics": {
@@ -1291,6 +1319,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Vocals",
       "diff_guitar": 5,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1341,6 +1370,7 @@
       "drum_track_name": "Percussion",
       "vocal_track_name": null,
       "diff_guitar": 3,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": null,
       "drum_metrics": {
@@ -1379,6 +1409,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Kit | Drums",
       "vocal_track_name": "Daron Malakian | Lead Vocals",
       "diff_guitar": 3,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1429,6 +1460,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Drum Kit",
       "vocal_track_name": null,
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": null,
       "drum_metrics": {
@@ -1467,6 +1499,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Kit | Drums",
       "vocal_track_name": "Daron Malakian | Lead Vocals",
       "diff_guitar": 5,
+      "diff_drums": 1,
       "diff_drums_real": 1,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1517,6 +1550,7 @@
       "drum_track_name": "John Dolmayan | TAMA Starclassic Bubinga | Drums",
       "vocal_track_name": "Daron Malakian | Lead Vocals",
       "diff_guitar": 3,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1567,6 +1601,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Lead Vocals | Serj Tankian",
       "diff_guitar": 3,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1617,6 +1652,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian (Vocals",
       "diff_guitar": 5,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1667,6 +1703,7 @@
       "drum_track_name": "Drums - John Dolmayan",
       "vocal_track_name": "Vocals - Serj Tankian",
       "diff_guitar": 3,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -1717,6 +1754,7 @@
       "drum_track_name": "John Dolmayan | Drums | Tama Starclassic Bubinga",
       "vocal_track_name": "Serj Tankian | Lead Vocals",
       "diff_guitar": 3,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -1767,6 +1805,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian - Vocals",
       "diff_guitar": 4,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -1817,6 +1856,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian - Vocals",
       "diff_guitar": 4,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 2,
       "drum_metrics": {
@@ -1867,6 +1907,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Lead Vocals | Serj Tankian",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 6,
       "drum_metrics": {
@@ -1917,6 +1958,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Vocals",
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -1967,6 +2009,7 @@
       "drum_track_name": "John Dolmayan | TAMA Starclassic Kit | Drums",
       "vocal_track_name": "Vocals | Serj Tankian & Daron Malakian",
       "diff_guitar": 2,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -2017,6 +2060,7 @@
       "drum_track_name": "John Dolmayan - Drums",
       "vocal_track_name": "Daron Malakian - Vocals",
       "diff_guitar": 3,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -2067,6 +2111,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Lead Vocals | Serj Tankian",
       "diff_guitar": 3,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -2117,6 +2162,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Kit | Drums",
       "vocal_track_name": "Serj Tankian And Daron Malakian | Vocals",
       "diff_guitar": 5,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 6,
       "drum_metrics": {
@@ -2167,6 +2213,7 @@
       "drum_track_name": "Drums - John Dolmayan",
       "vocal_track_name": "Vocals - Serj Tankian",
       "diff_guitar": 3,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -2217,6 +2264,7 @@
       "drum_track_name": "John Dolmayan | Drums",
       "vocal_track_name": "Serj Tankian | Vocals",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -2267,6 +2315,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Lead Vocals | Serj Tankian",
       "diff_guitar": 1,
+      "diff_drums": 1,
       "diff_drums_real": 1,
       "diff_vocals": 2,
       "drum_metrics": {
@@ -2317,6 +2366,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Vocals | Serj Tankian",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -2367,6 +2417,7 @@
       "drum_track_name": "John Dolamyan",
       "vocal_track_name": "Serj Tankian | Lead Vocals",
       "diff_guitar": 3,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 1,
       "drum_metrics": {
@@ -2417,6 +2468,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Daron Malakian - Vocals",
       "diff_guitar": 3,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -2467,6 +2519,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian - Vocals",
       "diff_guitar": 3,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -2517,6 +2570,7 @@
       "drum_track_name": "John Dolmayan I Drums",
       "vocal_track_name": null,
       "diff_guitar": 6,
+      "diff_drums": 6,
       "diff_drums_real": 6,
       "diff_vocals": null,
       "drum_metrics": {
@@ -2555,6 +2609,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Lead Vocals | Serj Tankian",
       "diff_guitar": 3,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -2605,6 +2660,7 @@
       "drum_track_name": "Drums - John",
       "vocal_track_name": null,
       "diff_guitar": 5,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": null,
       "drum_metrics": {
@@ -2643,6 +2699,7 @@
       "drum_track_name": "Drums",
       "vocal_track_name": null,
       "diff_guitar": 4,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": null,
       "drum_metrics": {
@@ -2681,6 +2738,7 @@
       "drum_track_name": "Drums | John Dolmayan",
       "vocal_track_name": "Vocals | Serj Tankian & Daron Malakian",
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -2731,6 +2789,7 @@
       "drum_track_name": "John Dolmayan | Drums",
       "vocal_track_name": "Serj Tankian | Vocals",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -2781,6 +2840,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 4,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": null,
       "drum_metrics": {
@@ -2819,6 +2879,7 @@
       "drum_track_name": "John Dolmayan - Drums",
       "vocal_track_name": "Serj Tankian | Lead Vocals",
       "diff_guitar": 3,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -2869,6 +2930,7 @@
       "drum_track_name": "Andy Khachaturian",
       "vocal_track_name": null,
       "diff_guitar": 3,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": null,
       "drum_metrics": {
@@ -2907,6 +2969,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian - Lead vocals",
       "diff_guitar": 4,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -2957,6 +3020,7 @@
       "drum_track_name": "John Dolmayan | Drums",
       "vocal_track_name": "Serj Tankian | Vocals",
       "diff_guitar": 2,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 1,
       "drum_metrics": {
@@ -3007,6 +3071,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Vocals",
       "diff_guitar": 5,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -3057,6 +3122,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 5,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": null,
       "drum_metrics": {
@@ -3095,6 +3161,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": null,
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": null,
       "drum_metrics": {
@@ -3133,6 +3200,7 @@
       "drum_track_name": "John Dolmayan - Drums",
       "vocal_track_name": "Serj Tankian - Vocals",
       "diff_guitar": 5,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -3183,6 +3251,7 @@
       "drum_track_name": "John Dolmayan | TAMA Starclassic Bubinga | Drums",
       "vocal_track_name": "Serj and Daron | Main Vocals",
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -3233,6 +3302,7 @@
       "drum_track_name": "John Dolmayan | Drums",
       "vocal_track_name": "Lead Vocals-Serj Tankian",
       "diff_guitar": 5,
+      "diff_drums": 1,
       "diff_drums_real": 1,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -3283,6 +3353,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Daron Malakian | Extra Vocals",
       "diff_guitar": 3,
+      "diff_drums": 3,
       "diff_drums_real": 3,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -3333,6 +3404,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj & Daron | Vocals",
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 3,
       "drum_metrics": {
@@ -3383,6 +3455,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Bubinga Kit | Drums",
       "vocal_track_name": "Serj Tankian | Lead Vocals",
       "diff_guitar": 6,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -3433,6 +3506,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Maple Drums",
       "vocal_track_name": "Serj Tankian | Lead Vocals",
       "diff_guitar": 6,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 6,
       "drum_metrics": {
@@ -3483,6 +3557,7 @@
       "drum_track_name": "John Dolmayan",
       "vocal_track_name": "Serj Tankian (Vocals)",
       "diff_guitar": 4,
+      "diff_drums": 4,
       "diff_drums_real": 4,
       "diff_vocals": 4,
       "drum_metrics": {
@@ -3533,6 +3608,7 @@
       "drum_track_name": "John Dolmayan - Drums",
       "vocal_track_name": "Serj Tankian - Vocals",
       "diff_guitar": 2,
+      "diff_drums": 2,
       "diff_drums_real": 2,
       "diff_vocals": 5,
       "drum_metrics": {
@@ -3583,6 +3659,7 @@
       "drum_track_name": "John Dolmayan | Tama Starclassic Kit | Drums",
       "vocal_track_name": "Serj Tankian | Vocals",
       "diff_guitar": 5,
+      "diff_drums": 5,
       "diff_drums_real": 5,
       "diff_vocals": 6,
       "drum_metrics": {
