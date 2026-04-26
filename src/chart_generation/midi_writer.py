@@ -12,6 +12,7 @@ from __future__ import annotations
 import os, sys, copy
 import mido
 sys.path.insert(0, os.path.dirname(__file__))
+from midi_repair import load_midi_file
 from parse_chart import parse_part, FRET_NAMES, DIFF_BASE
 from reducer import reduce_chart
 from parse_drums import parse_drums, DIFF_BASE_DRUMS, LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN
@@ -138,7 +139,7 @@ def write_reduced_midi(input_mid_path: str, output_mid_path: str,
                        replace_diffs=("Easy","Medium","Hard"),
                        parts=("PART GUITAR", "PART DRUMS")) -> dict:
     """Lê o notes.mid original, gera reduções para as PARTs especificadas e escreve novo arquivo."""
-    mid = mido.MidiFile(input_mid_path)
+    mid = load_midi_file(input_mid_path)
     info = dict(input=input_mid_path, output=output_mid_path,
                 ticks_per_beat=mid.ticks_per_beat,
                 difficulties_generated=list(replace_diffs), parts=list(parts),
@@ -170,7 +171,8 @@ def write_reduced_midi(input_mid_path: str, output_mid_path: str,
 
 def diff_midi(orig_path: str, gen_path: str) -> dict:
     """Compara notes.gen vs original em PART GUITAR e PART DRUMS."""
-    orig = mido.MidiFile(orig_path); gen = mido.MidiFile(gen_path)
+    orig = load_midi_file(orig_path)
+    gen = load_midi_file(gen_path)
     out = {"guitar": {}, "drums": {}}
     ag = parse_part(orig, "PART GUITAR"); bg = parse_part(gen, "PART GUITAR")
     for d in ("Easy","Medium","Hard","Expert"):
