@@ -87,6 +87,12 @@ public partial class MainWindow : Window
         UrlText.Text = AppServices.ReadLastUrl();
         Closing += OnMainWindowClosing;
         UrlText.LostFocus += OnUrlTextLostFocus;
+        IncludeSoftNotesCheck.IsChecked = AppServices.ReadIncludeSoftNotesEnabled(defaultValue: true);
+        ConvertFlamsToDoubleCheck.IsChecked = AppServices.ReadConvertFlamsToDoubleEnabled(defaultValue: false);
+        IncludeSoftNotesCheck.Checked += OnImportOptionsCheckChanged;
+        IncludeSoftNotesCheck.Unchecked += OnImportOptionsCheckChanged;
+        ConvertFlamsToDoubleCheck.Checked += OnImportOptionsCheckChanged;
+        ConvertFlamsToDoubleCheck.Unchecked += OnImportOptionsCheckChanged;
         SongsListView.ItemsSource = _songSource;
         ApplySongFilter();
         UpdateSessionUi();
@@ -115,12 +121,26 @@ public partial class MainWindow : Window
     private void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
         AppServices.WriteLastUrl(UrlText.Text.Trim());
+        PersistImportOptions();
         PersistLastSelectedTrack();
     }
 
     private void OnUrlTextLostFocus(object sender, RoutedEventArgs e)
     {
         AppServices.WriteLastUrl(UrlText.Text.Trim());
+    }
+
+    private void OnImportOptionsCheckChanged(object sender, RoutedEventArgs e)
+    {
+        PersistImportOptions();
+    }
+
+    private void PersistImportOptions()
+    {
+        bool includeSoftNotes = IncludeSoftNotesCheck.IsChecked == true;
+        bool convertFlamsToDouble = ConvertFlamsToDoubleCheck.IsChecked == true;
+        AppServices.WriteIncludeSoftNotesEnabled(includeSoftNotes);
+        AppServices.WriteConvertFlamsToDoubleEnabled(convertFlamsToDouble);
     }
 
     private void LoadSongs()
@@ -278,7 +298,7 @@ public partial class MainWindow : Window
             string customDir = entry.FullPath;
             string repoText = _repositoryRootDisplay;
             string downloadFile = Path.Combine(customDir, "songsterr_in.mid");
-            string outFile = Path.Combine(customDir, "notes.songsterr.mid");
+            string outFile = Path.Combine(customDir, "notes.generated.mid");
             _pathDownloadedSongsterrMidBelowRepo = RepositoryPaths.ToPathBelowRepository(downloadFile, repoText);
             _pathImportOutputSongsterrMidBelowRepo = RepositoryPaths.ToPathBelowRepository(outFile, repoText);
             _pathSyncSourceFolderBelowRepo = RepositoryPaths.ToPathBelowRepository(customDir, repoText);
@@ -669,7 +689,7 @@ public partial class MainWindow : Window
 
     private string DownloadScript => Path.Combine(RepoRoot, "src", "songsterr_parsing", "download_songsterr_midi.py");
     private string ImportScript => Path.Combine(RepoRoot, "src", "songsterr_parsing", "import_songsterr.py");
-    private string SyncScript => Path.Combine(RepoRoot, "sync_songs.ps1");
+    private string SyncScript => Path.Combine(RepoRoot, "copy_song_to_clone_hero.ps1");
 
     private IReadOnlyDictionary<string, string> BuildPythonEnv() =>
         new Dictionary<string, string> { { "PYTHONPATH", Path.Combine(RepoRoot, "src") + ";" + Path.Combine(RepoRoot, "src", "chart_generation") } };

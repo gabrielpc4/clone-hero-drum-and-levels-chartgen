@@ -1,10 +1,10 @@
 """
 Baixa o MIDI de uma aba Songsterr (cookies ajudam no POST; Plus pode ser necessário).
 
-Ordem: (1) se /api/revision tiver `source` com .gp (gp.songsterr.com), descarrega e
-converte com Node + @coderline/alphatab; (2) senão, POST /api/edits/download com a
-pista de bateria (instrumentId 1024) por omissão. Alguns tabs têm `source` vazio e
-o Songsterr responde 500 na exportação — isso é falha do site, não deste script.
+Ordem: (1) tenta POST /api/edits/download com payload da parte completa (JSON da
+pista, como o site faz), para obter MIDI com markers; (2) tenta POST simples por
+índice de pista; (3) fallback para /api/revision `source` (.gp) + Node/alphatab.
+Alguns tabs continuam a falhar no servidor do Songsterr com HTTP 500.
 
 Uso:
   python download_songsterr_midi.py "https://www.songsterr.com/a/wsa/...-s21961" "C:\\saida\\songsterr_in.mid" --cookie-file cookies.json
@@ -27,6 +27,16 @@ from urllib.parse import urlparse
 import requests
 
 SONGSTERR_BASE = "https://www.songsterr.com"
+_PART_HOSTS_WITH_IMAGE: tuple[str, ...] = (
+    "dqsljvtekg760",
+    "d34shlm8p2ums2",
+    "d3cqchs6g3b5ew",
+)
+_PART_HOSTS_LEGACY: tuple[str, ...] = (
+    "d3rrfvx08uyjp1",
+    "dodkcbujl0ebx",
+    "dj1usja78sinh",
+)
 
 # Browser-like headers: some Songsterr endpoints 500 on bare script requests.
 _POST_HEADERS: dict[str, str] = {
@@ -160,6 +170,46 @@ def _download_bytes(session: requests.Session, url: str, referer: str) -> bytes:
     return r.content
 
 
+def _part_payload_urls(song_id: int, revision_id: int, image: str, part_index: int) -> list[str]:
+    urls: list[str] = []
+    image_clean = image.strip()
+    if image_clean:
+        for host in _PART_HOSTS_WITH_IMAGE:
+            urls.append(f"https://{host}.cloudfront.net/{song_id}/{revision_id}/{image_clean}/{part_index}.json")
+    for host in _PART_HOSTS_LEGACY:
+        urls.append(f"https://{host}.cloudfront.net/part/{revision_id}/{part_index}")
+    return urls
+
+
+def _download_part_payload(
+    session: requests.Session,
+    song_id: int,
+    revision_id: int,
+    image: str,
+    part_index: int,
+    referer: str,
+) -> dict[str, Any] | None:
+    headers = {
+        "User-Agent": _POST_HEADERS["User-Agent"],
+        "Accept": "application/json",
+        "Referer": referer,
+    }
+    for url in _part_payload_urls(song_id, revision_id, image, part_index):
+        try:
+            response = session.get(url, headers=headers, timeout=60)
+        except requests.RequestException:
+            continue
+        if not response.ok:
+            continue
+        try:
+            payload = response.json()
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and isinstance(payload.get("measures"), list) and payload.get("measures"):
+            return payload
+    return None
+
+
 def _this_script_dir() -> Path:
     return Path(__file__).resolve().parent
 
@@ -272,6 +322,8 @@ def _download_midi(
     tracks = meta.get("tracks")
     if not isinstance(tracks, list) or not tracks:
         raise SystemExit("api/meta não contém tracks")
+    image = meta.get("image")
+    image_hash = image if isinstance(image, str) else ""
 
     if part_id_override is not None:
         part_index = int(part_id_override)
@@ -293,12 +345,31 @@ def _download_midi(
         "lyrics": [],
         "midi": True,
     }
-    if _download_midi_from_gp_if_available(session, int(revision_id), out_path, ref):
-        return
+    part_payload = _download_part_payload(
+        session=session,
+        song_id=int(song_id),
+        revision_id=int(revision_id),
+        image=image_hash,
+        part_index=int(part_index),
+        referer=ref,
+    )
+    if part_payload is not None:
+        body_with_part_payload = {
+            "revisionId": int(revision_id),
+            "songId": int(song_id),
+            "parts": [part_payload],
+            "lyrics": [],
+            "midi": True,
+        }
+        if _download_midi_from_post(session, body_with_part_payload, out_path, ref):
+            return
     if _download_midi_from_post(session, body, out_path, ref):
         return
+    if _download_midi_from_gp_if_available(session, int(revision_id), out_path, ref):
+        return
     raise SystemExit(
-        "Não foi possível obter o MIDI. Se /api/revision tiver `source` com .gp, instale dependências: na pasta "
+        "Não foi possível obter o MIDI por POST (payload completo e simples). Se /api/revision tiver `source` com .gp, "
+        "instale dependências: na pasta "
         + str(_this_script_dir())
         + " execute `npm install` e use Node no PATH. Caso `source` esteja vazio e o POST 500, o Songsterr não "
         "exportou o tab; confirme login Plus/cookies e tente outro tab ou mais tarde."

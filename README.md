@@ -13,7 +13,7 @@ Cenário real de produção:
 - a pasta da música (ver seção 2) já tem `notes.chart` ou `notes.mid` sincronizado ao audio
 - normalmente existe `PART GUITAR`, mas não `PART DRUMS`
 - o Songsterr fornece o MIDI fonte com a bateria em GM no canal 9
-- o resultado final deve ser salvo como `notes.songsterr.mid`
+- o resultado final deve ser salvo como `notes.generated.mid`
 
 A verdade temporal final é sempre a chart de referência. O MIDI do Songsterr
 só fornece a estrutura musical e os anchors de compasso.
@@ -24,14 +24,14 @@ só fornece a estrutura musical e os anchors de compasso.
 
 - **Packs Harmonix (oficiais)**: pastas na **raiz do repo** com o padrão
   `System of a Down - <titulo> (Harmonix)/`. Cada música é uma pasta; dentro
-  ficam `notes.mid` e, se existir, `notes.chart`, mais `notes.songsterr.mid` /
-  `notes.songsterr.mid` (e por vezes `notes.songsterr-<dd-mm-hh-mm>.mid` como
-  backup), `song.ini`, `album.jpg`, audio, etc. O `sync_songs.sh` (ver seção 15)
-  toma `notes.songsterr.mid` e publica em `Songs/…/notes.mid`.
+  ficam `notes.mid` e, se existir, `notes.chart`, mais `notes.generated.mid` /
+  `notes.generated.mid` (e por vezes `notes.generated-<dd-mm-hh-mm>.mid` como
+  backup), `song.ini`, `album.jpg`, audio, etc. O `copy_song_to_clone_hero.ps1` (ver seção 15)
+  toma `notes.generated.mid` e publica em `Songs/…/notes.mid`.
 
 - **Jogo (Clone Hero)**: `Songs/<nome da pasta>/` — destino alvo do sync. Cada
   música é uma subpasta com `notes.mid` (a chart servida no jogo: cópia de
-  `notes.songsterr.mid` na origem), `song.ini`, audio, etc. O sync não traz
+  `notes.generated.mid` na origem), `song.ini`, audio, etc. O sync não traz
   `*.mid` / `*.chart` extra da origem, só o `notes.mid` acima.
 
 - **Charts da comunidade (custom)**: `custom/<nome-da-pasta>/`, com a mesma
@@ -72,10 +72,10 @@ Pipeline principal:
 - `src/songsterr_parsing/songsterr_import/constants.py`
 
 Scripts e ferramentas (sync e entrega):
-- `sync_songs.sh` (ambiente com `bash`) e `sync_songs.ps1` (Windows) — mesma regra: publicar `notes.songsterr.mid` em `Songs/.../notes.mid` e copiar o resto da origem
+- `copy_song_to_clone_hero.ps1` (Windows) — copia `notes.generated.mid` para `Songs/.../notes.mid` e copia o resto da origem
 - `src/songsterr_parsing/download_songsterr_midi.py` — baixar MIDI a partir de URL (requer arquivo de cookies de sessão; export via API de usuário autenticado, tipicamente Songsterr Plus)
 - `tools/songsterr_workflow.ps1` — encadear *download* + *import* + *sync* no console (não invoca a aplicação WPF)
-- `tools/SongsterrImport.sln` — UI WPF (`SongsterrImport.Desktop`): escolhe pasta em `Songs/`, login Songsterr no WebView2, grava cookies, lança os mesmos `py` e `sync_songs.ps1` com log
+- `tools/SongsterrImport.sln` — UI WPF (`SongsterrImport.Desktop`): escolhe pasta em `Songs/`, login Songsterr no WebView2, grava cookies, lança os mesmos `py` e `copy_song_to_clone_hero.ps1` com log
   - Na **raiz do repo**: `Iniciar-Songsterr-Import.bat` (duplo clique: compila e abre; precisa de .NET 8 SDK) e `Criar-Atalho-No-Desktop.bat` (cria `Songsterr Import.lnk` na área de trabalho apontando para o `exe` em `bin\Debug\net8.0-windows\`)
 
 `requirements.txt` na raiz: `mido`, `requests`. Variável de ambiente de trabalho: `PYTHONPATH=src;src/chart_generation` (Windows usa `;` no caminho).
@@ -503,7 +503,7 @@ e:
 
 A música mais recente usada como baseline de trabalho foi `Question!`.
 
-### 14.3 `sync_songs.sh` e `sync_songs.ps1`
+### 14.3 `copy_song_to_clone_hero.ps1`
 
 O script **exige dois argumentos**: pasta de **origem** (ex.:
 `original/custom/System of a Down - Soil (Wagsii)/` ou a pasta de trabalho na
@@ -511,21 +511,15 @@ raiz) e o **destino sob** `Songs/` (pasta a criar ou reutilizar, ex.:
 `System of a Down - Soil`; também se pode passar `Songs/…` e o path é
 normalizado).
 
-A partir da raiz do repositório (bash):
-
-```bash
-./sync_songs.sh "original/custom/System of a Down - Soil (Wagsii)" "System of a Down - Soil"
-```
-
-No **Windows** (mesma semântica):
+No **Windows**:
 
 ```powershell
-.\sync_songs.ps1 "C:\...\pasta-origem-com-notes.songsterr.mid" "System of a Down - Soil"
+.\copy_song_to_clone_hero.ps1 "C:\...\pasta-origem-com-notes.generated.mid" "System of a Down - Soil"
 ```
 
-Comportamento (ambas as variantes):
+Comportamento:
 
-- Exige `notes.songsterr.mid` na origem e grava `Songs/<pasta>/notes.mid` a
+- Exige `notes.generated.mid` na origem e grava `Songs/<pasta>/notes.mid` a
   partir dele.
 - Copia o **restante** da origem para o destino, **excluindo** todos os
   `*.mid` e `*.chart` (fica só o `notes.mid` escrito acima).

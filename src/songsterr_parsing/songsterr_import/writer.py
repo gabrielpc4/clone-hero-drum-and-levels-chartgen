@@ -8,7 +8,7 @@ import mido
 
 from parse_drums import LANE_BLUE, LANE_GREEN, LANE_SNARE, LANE_YELLOW
 
-from .constants import LANE_LETTERS, should_keep_source_hit
+from .constants import should_keep_source_hit
 from .mapping import (
     build_closed_hat_skips,
     build_open_hat_lane_overrides,
@@ -58,14 +58,9 @@ def collect_mapped_drum_events(
 
     display_name = drum_selection.track_name if drum_selection.track_name else "<sem nome>"
     print(
-        f"  Drum track: {display_name} | "
-        f"mapped_hits={drum_selection.mapped_hits} | "
+        f"  source_drum_track: name={display_name} "
+        f"mapped_hits={drum_selection.mapped_hits} "
         f"channel9_hits={drum_selection.channel9_hits}"
-    )
-    print(f"  Open HH -> Y por padrao; B apenas quando isolado entre closed hats")
-    print(
-        f"  Tom map: "
-        f"{[(pitch_value, LANE_LETTERS[lane_value]) for pitch_value, lane_value in sorted(tom_lane_map.items())]}"
     )
 
     dedup_gap_ticks = int(round(src_tpb * dedup_beats))

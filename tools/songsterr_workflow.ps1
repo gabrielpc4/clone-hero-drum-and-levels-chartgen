@@ -5,8 +5,8 @@
 #   -CookieFile "$env:LOCALAPPDATA\SongsterrImport\cookies.json"
 #   -SongsterrUrl "https://www.songsterr.com/a/wsa/...-s21961"
 #   -DownloadTo "Songs\System of a Down - Toxicity\songsterr_in.mid"
-#   -OutSongsterrMid "Songs\System of a Down - Toxicity\notes.songsterr.mid"
-#   -SyncSource "C:\caminho\com\notes.songsterr.ja.escrito" (pasta com notes.songsterr.mid)
+#   -OutSongsterrMid "Songs\System of a Down - Toxicity\notes.generated.mid"
+#   -SyncSource "C:\caminho\com\notes.generated.ja.escrito" (pasta com notes.generated.mid)
 #   -SyncSongsSub "System of a Down - Toxicity"
 # Parâmetros opcionais: -RefPath, -InitialOffsetTicks, -DedupBeats, -FilterWeakSnares, -NoConvertFlams
 
@@ -43,7 +43,7 @@ function Ensure-ParentDir {
 
 $downloadScript = Join-Path $RepoRoot "src\songsterr_parsing\download_songsterr_midi.py"
 $importScript = Join-Path $RepoRoot "src\songsterr_parsing\import_songsterr.py"
-$syncScript = Join-Path $RepoRoot "sync_songs.ps1"
+$syncScript = Join-Path $RepoRoot "copy_song_to_clone_hero.ps1"
 
 if (-not (Test-Path -LiteralPath $downloadScript)) {
     throw "Não encontrado: $downloadScript"
@@ -86,12 +86,12 @@ Write-Host "== 2) import_songsterr ==" -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { throw "import_songsterr.py falhou com código $LASTEXITCODE" }
 
 if ($SyncSource -and $SyncSongsSub) {
-    Write-Host "== 3) sync_songs.ps1 ==" -ForegroundColor Cyan
+    Write-Host "== 3) copy_song_to_clone_hero.ps1 ==" -ForegroundColor Cyan
     & $syncScript -SourcePath $SyncSource -SongsSubPath $SyncSongsSub
-    if ($LASTEXITCODE -ne 0) { throw "sync_songs.ps1 falhou" }
+    if ($LASTEXITCODE -ne 0) { throw "copy_song_to_clone_hero.ps1 falhou" }
 }
 else {
-    Write-Host "(sem sync) use -SyncSource e -SyncSongsSub para publicar com sync_songs.ps1" -ForegroundColor Yellow
+    Write-Host "(sem sync) use -SyncSource e -SyncSongsSub para copiar com copy_song_to_clone_hero.ps1" -ForegroundColor Yellow
 }
 
 Write-Host "Concluído." -ForegroundColor Green

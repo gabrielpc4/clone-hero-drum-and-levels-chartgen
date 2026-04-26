@@ -1,4 +1,4 @@
-<Window x:Class="SongsterrImport.Desktop.MainWindow"
+﻿<Window x:Class="SongsterrImport.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Songsterr Import / Clone Hero"
@@ -398,7 +398,7 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Top" HorizontalAlignment="Left">
                     <Button Content="Open source folder" Click="OnOpenSyncSourceFolderClick" Padding="6,2" FontSize="11" MinHeight="24">
                         <Button.ToolTip>
-                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Opens the custom source folder for the selected track (reference chart, songsterr_in.mid, notes.songsterr.mid)."/>
+                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Opens the custom source folder for the selected track (reference chart, songsterr_in.mid, notes.generated.mid)."/>
                         </Button.ToolTip>
                     </Button>
                     <Button Content="Open dest folder" Margin="8,0,0,0" Click="OnOpenSongsDestFolderClick" Padding="6,2" FontSize="11" MinHeight="24">
@@ -463,7 +463,7 @@
                         </Border>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <CheckBox x:Name="ConvertFlamsToDoubleCheck" Content="Convert flams to double note" IsChecked="True" VerticalAlignment="Center" />
+                        <CheckBox x:Name="ConvertFlamsToDoubleCheck" Content="Convert flams to double note" IsChecked="False" VerticalAlignment="Center" />
                         <Border
                             Width="18"
                             Height="18"

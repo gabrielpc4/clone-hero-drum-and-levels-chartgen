@@ -63,14 +63,6 @@ def main() -> None:
 
     src_mid = mido.MidiFile(args.src_mid)
     convert_flams = not args.no_convert_flams
-    if args.filter_weak_snares:
-        print(f"  snare: filtrar notas com velocity < {DEFAULT_MINIMUM_SNARE_VELOCITY}")
-    else:
-        print("  snare: incluir notas 'soft' (todos os velocities)")
-    print(
-        f"  flam / same-lane (convert flams to double / dedup janela): {convert_flams} "
-        f"dedup_beats={args.dedup_beats!r}"
-    )
     import_context = resolve_import_context(
         src_mid_path=args.src_mid,
         out_mid_path=args.out_mid,
@@ -83,9 +75,7 @@ def main() -> None:
         )
 
     ref_mid = load_reference_midi(import_context.reference_path)
-    print("Modo padrao: sync por MEASURE_n do Songsterr contra compassos da chart")
-    if import_context.auto_detected:
-        print(f"  ref detectado automaticamente: {import_context.reference_path}")
+    print("Diagnostico de sync: alinhamento por markers MEASURE_n")
 
     snare_filter = (
         DEFAULT_MINIMUM_SNARE_VELOCITY if args.filter_weak_snares else None
@@ -100,24 +90,24 @@ def main() -> None:
     )
     if generation_result.measure_sync is not None:
         print(
-            f"  compassos-src={generation_result.measure_sync.source_measure_count} "
-            f"compassos-ref={generation_result.measure_sync.target_measure_count} "
-            f"compassos-pareados={generation_result.measure_sync.paired_measure_count}"
+            f"  compassos: source={generation_result.measure_sync.source_measure_count} "
+            f"target={generation_result.measure_sync.target_measure_count} "
+            f"paired={generation_result.measure_sync.paired_measure_count}"
         )
-        print(f"  compassos divididos em 2x={generation_result.measure_sync.split_measure_count}")
+        print(f"  split_2x={generation_result.measure_sync.split_measure_count}")
         print(
-            f"  offset manual={generation_result.measure_sync.initial_offset_ticks:+d} ticks "
-            f"(pula {generation_result.measure_sync.initial_measure_offset} compassos da chart)"
+            f"  offset: ticks={generation_result.measure_sync.initial_offset_ticks:+d} "
+            f"measures={generation_result.measure_sync.initial_measure_offset}"
         )
 
     if generation_result.first_drum_tick is not None:
         print(
-            f"  -> 1a drum: tick={generation_result.first_drum_tick} "
+            f"  first_drum: tick={generation_result.first_drum_tick} "
             f"beat={generation_result.first_drum_tick / generation_result.output_mid.ticks_per_beat:.2f}"
         )
 
     generation_result.output_mid.save(args.out_mid)
-    print(f"Escrito: {args.out_mid}")
+    print("  status: midi_gerado")
 
 
 if __name__ == "__main__":
