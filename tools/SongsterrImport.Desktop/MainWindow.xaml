@@ -1,0 +1,501 @@
+<Window x:Class="SongsterrImport.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Songsterr Import / Clone Hero"
+        Height="750"
+        Width="880"
+        MinHeight="500"
+        MinWidth="680">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="220"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <GroupBox Grid.Row="0" Header="Songsterr session" Padding="6" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="SessionStatusText" Text="Not signed in" VerticalAlignment="Center" MinWidth="120" />
+                <Button x:Name="SessionActionButton" Content="Login" MinWidth="88" Margin="8,0,0,0" Padding="8,4" Click="OnSessionActionClick" />
+            </StackPanel>
+        </GroupBox>
+
+        <GroupBox Grid.Row="1" Header="Source tracks" Padding="6" Margin="0,0,0,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Search" VerticalAlignment="Center" Grid.Column="0" Margin="0,0,8,0" />
+                    <TextBox x:Name="FilterText" Grid.Column="1" TextChanged="OnFilterTextChanged" />
+                    <TextBlock x:Name="SongsStatsText" Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="DimGray" Text="Complete: 0 / 0" />
+                </Grid>
+                <ListView x:Name="SongsListView" Grid.Row="1"
+                          MouseDoubleClick="SongsListView_OnMouseDoubleClick"
+                          SelectionChanged="SongsListView_OnSelectionChanged"
+                          GridViewColumnHeader.Click="SongsListView_ColumnHeaderClick"
+                          IsSynchronizedWithCurrentItem="True"
+                          MinHeight="120">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn
+                                x:Name="SongsColumnProcessed"
+                                Width="64">
+                                <GridViewColumn.Header>
+                                    <TextBlock
+                                        x:Name="SongsHeaderProcessed"
+                                        Text="Processed"
+                                        TextAlignment="Right"
+                                        TextTrimming="CharacterEllipsis"
+                                        HorizontalAlignment="Stretch">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="A matching folder under Songs/ in the repository exists — this chart was copied there for Clone Hero."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock
+                                            Text="{Binding InSongsStatus}"
+                                            TextAlignment="Right"
+                                            HorizontalAlignment="Stretch"
+                                            TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding InSongsStatus}" Value="Yes">
+                                                            <Setter Property="Foreground" Value="#FF1B5E20" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding InSongsStatus}" Value="No">
+                                                            <Setter Property="Foreground" Value="#FFB71C1C" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="120" DisplayMemberBinding="{Binding SongIniTitle}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderTitle" Text="Title" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="name in song.ini — the chart title (the name shown in-game, often the song name)."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="128" DisplayMemberBinding="{Binding SongIniArtist}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderArtist" Text="Artist" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="artist in song.ini — primary performer or band."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="100" DisplayMemberBinding="{Binding SongIniAlbum}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderAlbum" Text="Album" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="album in song.ini — the release or source album."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="48" DisplayMemberBinding="{Binding SongIniLengthDisplay}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderLen" Text="Duration">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Duration from song_length: wall-clock track length, stored in milliseconds in the file, shown as m:ss."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="40" DisplayMemberBinding="{Binding SongIniYear}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderYear" Text="Yr">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="year in song.ini — release (or context) year for the track."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="80" DisplayMemberBinding="{Binding SongIniGenre}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderGenre" Text="Genre" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="genre in song.ini."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="90" DisplayMemberBinding="{Binding SongIniCharter}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderCharter" Text="Charter" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="charter in song.ini — the person or group that authored the custom chart."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="50" DisplayMemberBinding="{Binding SongIniPreviewDisplay}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderPr" Text="Prv">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="preview_start_time: where the menu preview / audition begins (milliseconds in the file, shown in seconds)."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniAlbumTrack}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderAt" Text="AT" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="album_track — track number on the album."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniPlaylistTrack}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderPt" Text="PT" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="playlist_track — order in a playlist or setlist."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="70" DisplayMemberBinding="{Binding SongIniIcon}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderIcon" Text="Icon" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="icon in song.ini — icon set / charter identity key."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="36" DisplayMemberBinding="{Binding SongIniModchart}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderMod" Text="Mod" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="modchart: whether a scripted mod / animation chart layer is used."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="36" DisplayMemberBinding="{Binding SongIniCount}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderCnt" Text="Cnt" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="count: optional count field from song.ini."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="150" DisplayMemberBinding="{Binding SongIniLoadingShort}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderLoad" Text="Load Phrase" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="loading_phrase: trivia text on the load screen. Hover the cell to see the full string."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock
+                                            Text="{Binding SongIniLoadingShort}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTip="{Binding SongIniLoadingFull}" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniDiffDrums}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderD" Text="D" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Drums: diff_drums — estimated default drums difficulty, typically 0 (easiest) through 5 or 5+."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="36" DisplayMemberBinding="{Binding SongIniDiffDrumsReal}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderDr" Text="D+" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="D+ = diff_drums_real — pro / real-drums (expert+) difficulty when different from the base drums tier."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniDiffGuitar}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderG" Text="G" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="G = diff_guitar — estimated guitar difficulty."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniDiffBass}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderB" Text="B" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="B = diff_bass — estimated bass difficulty."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniDiffKeys}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderK" Text="K" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="K = diff_keys — keys (keyboard) track difficulty."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="36" DisplayMemberBinding="{Binding SongIniDiffBand}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderBnd" Text="Bnd" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Bnd = diff_band — full-band (legacy) combined difficulty."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniDiffRhythm}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderRh" Text="Rh" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Rh = diff_rhythm — guitar co-op / rhythm (second guitar) part."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="36" DisplayMemberBinding="{Binding SongIniDiffGuitarGhl}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderGG" Text="GG" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="GG = diff_guitarghl — Guitar Hero Live (6-fret) guitar difficulty."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="36" DisplayMemberBinding="{Binding SongIniDiffBassGhl}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderBG" Text="BG" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="BG = diff_bassghl — GHL six-string bass."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="32" DisplayMemberBinding="{Binding SongIniDiffVocals}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderV" Text="V" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="V = diff_vocals — lead vocals (harmonix) difficulty."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="52" DisplayMemberBinding="{Binding SongIniEndEventsOn}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderEnd" Text="End" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="end_events: whether the chart includes end/section event markers the game uses to finish the song or for practice."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="&#x2713;" HorizontalAlignment="Center" Foreground="#FF1B5E20" FontWeight="Bold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Hidden"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding SongIniEndEventsOn}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="48" DisplayMemberBinding="{Binding SongIniFiveLaneDrumsOn}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeader5L" Text="5L" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="five_lane_drums: use five-lane (Rock Band style) drum lanes instead of a four-pad+kick layout."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="&#x2713;" HorizontalAlignment="Center" Foreground="#FF1B5E20" FontWeight="Bold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Hidden"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding SongIniFiveLaneDrumsOn}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="48" DisplayMemberBinding="{Binding SongIniProDrumsOn}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderPro" Text="Pro" TextAlignment="Center">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="pro_drums: Pro Drums mode (cymbal lanes, tom colour discrimination) is enabled."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="&#x2713;" HorizontalAlignment="Center" Foreground="#FF1B5E20" FontWeight="Bold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Hidden"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding SongIniProDrumsOn}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="180" DisplayMemberBinding="{Binding SongIniMore}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderMore" Text="More" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Any other [song] keys that do not have a dedicated column (e.g. delay, custom tags). Shown as key=value."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Top" HorizontalAlignment="Left">
+                    <Button Content="Open source folder" Click="OnOpenSyncSourceFolderClick" Padding="6,2" FontSize="11" MinHeight="24">
+                        <Button.ToolTip>
+                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Opens the custom source folder for the selected track (reference chart, songsterr_in.mid, notes.songsterr.mid)."/>
+                        </Button.ToolTip>
+                    </Button>
+                    <Button Content="Open dest folder" Margin="8,0,0,0" Click="OnOpenSongsDestFolderClick" Padding="6,2" FontSize="11" MinHeight="24">
+                        <Button.ToolTip>
+                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Opens the copy under repository Songs/ used by Clone Hero for the selected track (created after the first successful sync)."/>
+                        </Button.ToolTip>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Grid.Row="2" Header="Process Song" Padding="6" Margin="0,0,0,8">
+            <StackPanel>
+    <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="URL" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox x:Name="UrlText"
+                             Grid.Column="1"
+                             Margin="0,0,8,0"
+                             MinHeight="22"
+                             MaxHeight="26"
+                             Height="26"
+                             TextWrapping="NoWrap"
+                             MaxLines="1"
+                             AcceptsReturn="False"
+                             VerticalContentAlignment="Center"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" />
+                    <Button x:Name="DownloadButton" Content="Download MIDI" Grid.Column="2" Click="OnDownloadClick" Padding="8,4" MinWidth="120" Margin="0,0,8,0" />
+                    <Button x:Name="GenerateDrumChartButton" Grid.Column="3" Content="Generate Drum Chart" IsEnabled="False" Click="OnGenerateDrumChartClick" Padding="8,4" MinWidth="150" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Top">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <CheckBox x:Name="IncludeSoftNotesCheck" Content="Include soft notes" IsChecked="True" VerticalAlignment="Center" />
+                        <Border
+                            Width="18"
+                            Height="18"
+                            CornerRadius="9"
+                            BorderBrush="#FFB0B0B0"
+                            BorderThickness="1"
+                            Background="#FFF5F5F5"
+                            Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            Cursor="Help"
+                            ToolTipService.ShowDuration="60000"
+                            ToolTipService.InitialShowDelay="200">
+                            <Border.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="When checked, every snare (including very quiet or ghost snares) is considered. When unchecked, low-velocity snare hits that look like ‘ghosts’ are dropped using the project default cut-off."/>
+                            </Border.ToolTip>
+                            <TextBlock
+                                Text="?"
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="#FF5A5A5A"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                        </Border>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox x:Name="ConvertFlamsToDoubleCheck" Content="Convert flams to double note" IsChecked="True" VerticalAlignment="Center" />
+                        <Border
+                            Width="18"
+                            Height="18"
+                            CornerRadius="9"
+                            BorderBrush="#FFB0B0B0"
+                            BorderThickness="1"
+                            Background="#FFF5F5F5"
+                            Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            Cursor="Help"
+                            ToolTipService.ShowDuration="60000"
+                            ToolTipService.InitialShowDelay="200">
+                            <Border.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="440" Text="When on, the importer uses the project flam window (in code): close same-lane pairs become one musical flam (snare → red + yellow) or a single note on other lanes. When off, every hit stays independent."/>
+                            </Border.ToolTip>
+                            <TextBlock
+                                Text="?"
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="#FF5A5A5A"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <GroupBox Grid.Row="3" Header="Log" Padding="6" VerticalAlignment="Stretch">
+            <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <TextBox x:Name="LogText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Disabled" FontFamily="Consolas" FontSize="11" BorderThickness="0" />
+            </ScrollViewer>
+        </GroupBox>
+    </Grid>
+</Window>

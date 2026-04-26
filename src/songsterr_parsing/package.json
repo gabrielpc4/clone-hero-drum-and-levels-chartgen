@@ -1,0 +1,9 @@
+{
+  "name": "songsterr-parsing-midi",
+  "private": true,
+  "type": "module",
+  "description": "GP7+ to MIDI via @coderline/alphatab (used by download_songsterr_midi.py fallback)",
+  "dependencies": {
+    "@coderline/alphatab": "1.8.2"
+  }
+}

@@ -1,6 +1,6 @@
 """
-Importa um MIDI do Songsterr e gera uma PART DRUMS Expert para Clone Hero
-usando, por padrao, o sync por MEASURE_n contra os compassos da chart.
+Importa um MIDI do Songsterr e gera uma `PART DRUMS` Expert para Clone Hero
+usando, por padrao, o sync por `MEASURE_n` contra os compassos da chart.
 
 Uso:
   python3 import_songsterr.py <externo.mid> <saida.mid>
@@ -13,23 +13,17 @@ import sys
 
 import mido
 
-sys.path.insert(0, os.path.dirname(__file__))
+_songsterr_parsing_dir = os.path.dirname(os.path.abspath(__file__))
+_chart_generation_dir = os.path.normpath(os.path.join(_songsterr_parsing_dir, "..", "chart_generation"))
+# parse_chart vive em chart_generation; songsterr_import/ em songsterr_parsing.
+sys.path.insert(0, _chart_generation_dir)
+sys.path.insert(0, _songsterr_parsing_dir)
 
 from parse_chart import load_reference_midi
-from postprocess_bubbles_songsterr import apply_bubbles_songsterr_postprocess
-from postprocess_soldier_side_songsterr import apply_soldier_side_songsterr_postprocess
 from songsterr_import.context import resolve_import_context
 from songsterr_import.constants import DEFAULT_MINIMUM_SNARE_VELOCITY
 from songsterr_import.measure_marker_sync import DEFAULT_INITIAL_OFFSET_TICKS
 from songsterr_import.pipeline import generate_songsterr_drums_synced_to_measure_markers
-
-
-def _should_run_bubbles_postprocess(src_mid_path: str, out_mid_path: str) -> bool:
-    return "system of a down - bubbles" in src_mid_path.lower() or "system of a down - bubbles" in out_mid_path.lower()
-
-
-def _should_run_soldier_side_postprocess(src_mid_path: str, out_mid_path: str) -> bool:
-    return "system of a down - soldier side" in src_mid_path.lower() or "system of a down - soldier side" in out_mid_path.lower()
 
 
 def main() -> None:
@@ -50,35 +44,33 @@ def main() -> None:
         ),
     )
     argument_parser.add_argument(
-        "--drop-before-src-beat",
-        type=float,
-        default=0.0,
-        help="dropa notas src antes deste beat (remove count-in / baqueta).",
-    )
-    argument_parser.add_argument(
         "--dedup-beats",
         type=float,
         default=1 / 16,
-        help="pares mesma-lane com gap <= N beats viram R+Y (snare) ou dedup (outros).",
+        help="pares mesma-lane com gap <= N beats: flam (caixa R+Y) ou dedup (outros) quando a conversao de flams esta ativa.",
     )
     argument_parser.add_argument(
-        "--minimum-snare-velocity",
-        type=int,
-        default=None,
-        help=(
-            "ignora apenas caixas com velocity abaixo deste valor; "
-            f"omita para incluir todas, ou passe {DEFAULT_MINIMUM_SNARE_VELOCITY} "
-            "para reativar o filtro antigo."
-        ),
+        "--filter-weak-snares",
+        action="store_true",
+        help=f"ignora caixas com velocity abaixo de {DEFAULT_MINIMUM_SNARE_VELOCITY} (ghosts). O padrao e incluir todas (notas 'soft').",
+    )
+    argument_parser.add_argument(
+        "--no-convert-flams",
+        action="store_true",
+        help="nao aplica a logica de flam (dois bumbos/duas notas juntinhas) nem dedup por proximidade; cada nota source vira mapeada sem merge.",
     )
     args = argument_parser.parse_args()
 
     src_mid = mido.MidiFile(args.src_mid)
-    print(f"  drop antes de src_beat {args.drop_before_src_beat:.2f}")
-    if args.minimum_snare_velocity is None:
-        print("  min snare velocity: inclui todas as caixas")
+    convert_flams = not args.no_convert_flams
+    if args.filter_weak_snares:
+        print(f"  snare: filtrar notas com velocity < {DEFAULT_MINIMUM_SNARE_VELOCITY}")
     else:
-        print(f"  min snare velocity: {args.minimum_snare_velocity}")
+        print("  snare: incluir notas 'soft' (todos os velocities)")
+    print(
+        f"  flam / same-lane (convert flams to double / dedup janela): {convert_flams} "
+        f"dedup_beats={args.dedup_beats!r}"
+    )
     import_context = resolve_import_context(
         src_mid_path=args.src_mid,
         out_mid_path=args.out_mid,
@@ -95,13 +87,16 @@ def main() -> None:
     if import_context.auto_detected:
         print(f"  ref detectado automaticamente: {import_context.reference_path}")
 
+    snare_filter = (
+        DEFAULT_MINIMUM_SNARE_VELOCITY if args.filter_weak_snares else None
+    )
     generation_result = generate_songsterr_drums_synced_to_measure_markers(
         src_mid,
         ref_mid,
         initial_offset_ticks=args.initial_offset_ticks,
-        drop_before_src_beat=args.drop_before_src_beat,
         dedup_beats=args.dedup_beats,
-        minimum_snare_velocity=args.minimum_snare_velocity,
+        minimum_snare_velocity=snare_filter,
+        convert_flams_to_double_note=convert_flams,
     )
     if generation_result.measure_sync is not None:
         print(
@@ -120,20 +115,6 @@ def main() -> None:
             f"  -> 1a drum: tick={generation_result.first_drum_tick} "
             f"beat={generation_result.first_drum_tick / generation_result.output_mid.ticks_per_beat:.2f}"
         )
-
-    if import_context.reference_path is not None and _should_run_bubbles_postprocess(args.src_mid, args.out_mid):
-        print("  aplicando post-processamento especifico da Bubbles")
-        generation_result.output_mid = apply_bubbles_songsterr_postprocess(
-            generation_result.output_mid,
-            src_mid,
-            ref_mid,
-            initial_offset_ticks=args.initial_offset_ticks,
-            minimum_snare_velocity=args.minimum_snare_velocity,
-        )
-
-    if _should_run_soldier_side_postprocess(args.src_mid, args.out_mid):
-        print("  aplicando post-processamento especifico da Soldier Side")
-        generation_result.output_mid = apply_soldier_side_songsterr_postprocess(generation_result.output_mid)
 
     generation_result.output_mid.save(args.out_mid)
     print(f"Escrito: {args.out_mid}")

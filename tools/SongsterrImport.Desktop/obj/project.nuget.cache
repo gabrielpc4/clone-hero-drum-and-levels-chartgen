@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "K1nENwzb6yE=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Gabriel\\Documents\\Clone Hero\\tools\\SongsterrImport.Desktop\\SongsterrImport.Desktop.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Gabriel\\.nuget\\packages\\microsoft.web.webview2\\1.0.3912.50\\microsoft.web.webview2.1.0.3912.50.nupkg.sha512"
+  ],
+  "logs": []
+}

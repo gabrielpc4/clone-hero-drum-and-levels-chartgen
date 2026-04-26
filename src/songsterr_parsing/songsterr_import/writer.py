@@ -29,9 +29,9 @@ class MappedDrumEvent:
 
 def collect_mapped_drum_events(
     src_mid: mido.MidiFile,
-    drop_before_src_beat: float = 0.0,
     dedup_beats: float = 1 / 16,
     minimum_snare_velocity: int | None = None,
+    convert_flams_to_double_note: bool = True,
 ) -> list[MappedDrumEvent]:
     src_tpb = src_mid.ticks_per_beat
     drum_selection = select_source_drum_track(
@@ -120,7 +120,11 @@ def collect_mapped_drum_events(
         lane_key = (lane_value, is_cymbal)
         previous_tick = last_note_by_lane.get(lane_key)
 
-        if previous_tick is not None and absolute_source_tick - previous_tick <= dedup_gap_ticks:
+        if (
+            convert_flams_to_double_note
+            and previous_tick is not None
+            and absolute_source_tick - previous_tick <= dedup_gap_ticks
+        ):
             if lane_value == LANE_SNARE:
                 skipped_weak_snares.discard((previous_tick, message.note))
                 snare_flam_second_to_first[(absolute_source_tick, message.note)] = previous_tick
@@ -157,9 +161,6 @@ def collect_mapped_drum_events(
 
         flam_first_tick = snare_flam_second_to_first.get((absolute_source_tick, message.note))
         source_tick = flam_first_tick if flam_first_tick is not None else absolute_source_tick
-
-        if source_tick / src_tpb < drop_before_src_beat:
-            continue
 
         overridden_lane_value = tom_lane_overrides.get((absolute_source_tick, message.note))
 
@@ -262,15 +263,15 @@ def build_part_drums_track(
 
 def build_drums_track(
     src_mid: mido.MidiFile,
-    drop_before_src_beat: float = 0.0,
     dedup_beats: float = 1 / 16,
     minimum_snare_velocity: int | None = None,
+    convert_flams_to_double_note: bool = True,
 ) -> mido.MidiTrack:
     mapped_events = collect_mapped_drum_events(
         src_mid,
-        drop_before_src_beat=drop_before_src_beat,
         dedup_beats=dedup_beats,
         minimum_snare_velocity=minimum_snare_velocity,
+        convert_flams_to_double_note=convert_flams_to_double_note,
     )
 
     return build_part_drums_track(

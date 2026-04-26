@@ -40,6 +40,9 @@ __pycache__/
 .venv/
 venv/
 
+# Songsterr GP→MIDI (npm / alphatab)
+src/songsterr_parsing/node_modules/
+
 # Editores
 .cursor/
 .vscode/

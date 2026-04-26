@@ -61,7 +61,7 @@ def resolve_import_context(
 
     if explicit_ref_path is not None and reference_path is None:
         raise RuntimeError(
-            "Nao foi possivel resolver notes.mid ou notes.chart para o sync por compassos. "
+            "Não foi possível resolver notes.mid ou notes.chart para o sync por compassos. "
             "Passe --ref-path valido."
         )
 

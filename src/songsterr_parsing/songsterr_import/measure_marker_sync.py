@@ -106,7 +106,7 @@ def _source_measure_marker_ticks(src_mid: mido.MidiFile) -> list[int]:
         marker_ticks.append(absolute_tick)
 
     if len(marker_ticks) < 2:
-        raise RuntimeError("O MIDI fonte nao tem markers MEASURE_n suficientes no track de bateria")
+        raise RuntimeError("O MIDI fonte não tem markers MEASURE_n suficientes na pista de bateria")
 
     return sorted(set(marker_ticks))
 
@@ -214,7 +214,7 @@ def build_measure_marker_tick_mapper(
     source_measure_ticks = _source_measure_marker_ticks(src_mid)
     target_measure_ticks = measure_start_ticks(ref_mid)
     if min(len(source_measure_ticks), len(target_measure_ticks)) < 2:
-        raise RuntimeError("Nao ha compassos suficientes para montar o sync por MEASURE_n")
+        raise RuntimeError("Não há compassos suficientes para montar o sync por MEASURE_n")
 
     source_tempo_map = build_tempo_map(src_mid)
     resolved_initial_offset_ticks = initial_offset_ticks
