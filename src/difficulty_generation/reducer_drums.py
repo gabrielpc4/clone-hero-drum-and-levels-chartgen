@@ -6,8 +6,8 @@ Implementa as regras D-R1 a D-R12 documentadas em §14 do HANDOFF.md.
 Pipeline:
   1. Para cada nota Expert (kick / snare / Y / B / G, com is_cymbal):
      - Decidir se mantém esse tick na dificuldade alvo
-     - Aplicar conversão de lane (D-R1, D-R1.1, D-R9, D-R10, D-R11)
-     - Aplicar regra D-R3 (kick paired only em E/M)
+     - Aplicar conversão de lane (D-R1, D-R1.1, D-R9, D-R11)
+     - Aplicar regra D-R3 (Easy sem bumbo; Medium: kick paired)
   2. 2x kick (pitch 95): drop sempre (D-R7)
   3. Markers 110/111/112: preservar mas só consultados em Hard/Expert
   4. Drum fills 120-124: preservar
@@ -15,8 +15,7 @@ Pipeline:
 from __future__ import annotations
 import os, sys
 from collections import defaultdict, Counter
-from statistics import median
-from typing import Dict, List, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 sys.path.insert(0, os.path.dirname(__file__))
 from parse_drums import (parse_drums, DrumNote, DrumChart, DIFF_BASE_DRUMS,
                          LANE_NAMES, LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN)
@@ -69,22 +68,498 @@ def detect_lane_consolidation(expert: DrumChart) -> Dict[int, int]:
     return mapping
 
 
-def detect_green_cym_strategy(expert: DrumChart) -> str:
-    """Estratégia para Green-cym do Expert em Hard (D-R10):
-       - Se >30 Green-cym: tende a virar Blue-cym
-       - Se <=30: pode preservar Green-cym
-       Em E/M: Green-cym vira Blue-tom (não Green-tom!)."""
-    n_green_cym = sum(1 for n in expert.notes
-                      if n.lane == LANE_GREEN and n.is_cymbal)
-    return "to_blue_cym" if n_green_cym > 30 else "keep"
+def _expert_by_tick_excluding_2x(expert: DrumChart) -> Dict[int, List[DrumNote]]:
+    m: Dict[int, List[DrumNote]] = defaultdict(list)
+    for n in expert.notes:
+        if n.is_2x_kick:
+            continue
+        m[n.tick].append(n)
+    return m
+
+
+def _is_tom(n: DrumNote) -> bool:
+    return n.lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and not n.is_cymbal
+
+
+def _expert_group_has_snare_or_tom(group: List[DrumNote]) -> bool:
+    """Snare ou tom (pad Y/B/G) no mesmo tick — o kick nesses níveis nunca acompanha."""
+    if any(m.lane == LANE_SNARE for m in group):
+        return True
+    if any(_is_tom(m) for m in group):
+        return True
+    return False
+
+
+def _expert_group_has_green_cym_and_kick(group: List[DrumNote]) -> bool:
+    """No Expert: bumbo + crash (verde) no mesmo tick (bumbo+crash, foot+crash)."""
+    if not any(m.lane == LANE_KICK and not m.is_2x_kick for m in group):
+        return False
+    if not any(m.lane == LANE_GREEN and m.is_cymbal for m in group):
+        return False
+    return True
+
+
+def _medium_foot_protection_ticks_from_expert(
+    expert_by_tick: Dict[int, List[DrumNote]],
+) -> Set[int]:
+    """
+    Ticks onde o Expert teria padrão bumbo+crash (e Medium pode omitir o bumbo):
+    ainda se usam para isentar o crash (verde) no 1/16 e no 1/4 de prato.
+    """
+    out: Set[int] = set()
+    for t, grp in expert_by_tick.items():
+        if not _expert_group_has_green_cym_and_kick(grp):
+            continue
+        if _expert_group_has_snare_or_tom(grp):
+            continue
+        out.add(t)
+    return out
+
+
+def _medium_tick_allows_kick(
+    tick: int,
+    tpb: int,
+    time_sigs: List[Tuple[int, int, int]],
+    expert_by_tick: Dict[int, List[DrumNote]],
+) -> bool:
+    """Medium: bumbo só no 1.º tempo; não há bumbo no padrão Expert crash+foot (fora do 1.º, não se recupera bumbo)."""
+    grp = expert_by_tick.get(tick, [])
+    if _expert_group_has_snare_or_tom(grp):
+        return False
+    return _is_kick_on_downbeat_in_bar(tick, tpb, time_sigs)
+
+
+def _active_time_signature_at(
+    tick: int, time_sigs: List[Tuple[int, int, int]]
+) -> Tuple[int, int, int]:
+    """
+    (sig_start_tick, numerator, denominator) da assinatura ativa em `tick`
+    (última com sig_start <= tick; se vazio, 4/4 a partir de 0).
+    """
+    if not time_sigs:
+        return (0, 4, 4)
+    best: Tuple[int, int, int] = (0, 4, 4)
+    for sig_start, num, den in sorted(time_sigs, key=lambda x: x[0]):
+        if sig_start <= tick:
+            best = (sig_start, num, den)
+        else:
+            break
+    return best
+
+
+def _measure_len_ticks(numerator: int, denominator: int, tpb: int) -> int:
+    if denominator <= 0:
+        return 4 * tpb
+    return max(1, int(tpb * numerator * 4 / denominator))
+
+
+def _is_kick_on_quarter_beat_in_bar(
+    tick: int, tpb: int, time_sigs: List[Tuple[int, int, int]]
+) -> bool:
+    """
+    Kick alinhado a um tempo de semínima dentro do compasso (tempos 1..N
+    consoante o numerador/TS), não só ao 1.º. Equivale a: posição no compasso
+    a partir de `time_sigs` tem offset múltiplo de `tpb` (1 semínima).
+    """
+    sig_start, num, den = _active_time_signature_at(tick, time_sigs)
+    mlen = _measure_len_ticks(num, den, tpb)
+    pos_in_bar = (tick - sig_start) % mlen
+    return (pos_in_bar % tpb) == 0
+
+
+def _is_kick_on_downbeat_in_bar(
+    tick: int, tpb: int, time_sigs: List[Tuple[int, int, int]]
+) -> bool:
+    """
+    1.º tempo / nota mais forte do compasso (início de compasso no TS do MIDI).
+    """
+    sig_start, num, den = _active_time_signature_at(tick, time_sigs)
+    mlen = _measure_len_ticks(num, den, tpb)
+    return (tick - sig_start) % mlen == 0
+
+
+def _kicks_from_expert_with_tick_rule(
+    ex_notes: List[DrumNote],
+    expert_by_tick: Dict[int, List[DrumNote]],
+    time_sigs: List[Tuple[int, int, int]],
+    tpb: int,
+    tick_allows_kick: Callable[[int], bool],
+) -> List[DrumNote]:
+    out: List[DrumNote] = []
+    for tick in sorted({n.tick for n in ex_notes if n.lane == LANE_KICK}):
+        if not tick_allows_kick(tick):
+            continue
+        grp = expert_by_tick.get(tick, [])
+        if _expert_group_has_snare_or_tom(grp):
+            continue
+        out.append(
+            DrumNote(
+                tick=tick,
+                lane=LANE_KICK,
+                is_cymbal=False,
+                velocity=_kick_velocity_for_tick(expert_by_tick, tick),
+            )
+        )
+    return out
+
+
+def _kick_velocity_for_tick(
+    expert_by_tick: Dict[int, List[DrumNote]], tick: int
+) -> int:
+    for n in expert_by_tick.get(tick, []):
+        if n.lane == LANE_KICK and not n.is_2x_kick:
+            return n.velocity
+    return 100
+
+
+def _drums_chart_from_expert_base(
+    expert: DrumChart, difficulty: str, notes: List[DrumNote]
+) -> DrumChart:
+    return DrumChart(
+        difficulty=difficulty,
+        ticks_per_beat=expert.ticks_per_beat,
+        notes=notes,
+        overdrive=list(expert.overdrive),
+        drum_fills=list(expert.drum_fills),
+        cymbal_flags=dict(expert.cymbal_flags),
+        time_signatures=list(expert.time_signatures),
+    )
+
+
+def _reduce_drums_expert_to_hard(expert: DrumChart) -> DrumChart:
+    """
+    Hard a partir do Expert:
+    - Mantém todas as notas não-kick do Expert (2x excluído) — incluindo todos os pratos.
+    - Kicks: as mesmas regras de kick do Medium, descritas em
+      _reduce_drums_expert_to_medium, mas com grelha de **semínima** (1..N
+      tempos no compasso) — i.e. a antiga regra de kick do Medium.
+    """
+    tpb = expert.ticks_per_beat
+    ex_notes = [n for n in expert.notes if not n.is_2x_kick]
+    expert_by_tick = _expert_by_tick_excluding_2x(expert)
+    time_sigs = list(expert.time_signatures) if expert.time_signatures else [(0, 4, 4)]
+    out: List[DrumNote] = []
+    for n in ex_notes:
+        if n.lane == LANE_KICK:
+            continue
+        out.append(
+            DrumNote(
+                tick=n.tick,
+                lane=n.lane,
+                is_cymbal=n.is_cymbal,
+                velocity=n.velocity,
+            )
+        )
+    out.extend(
+        _kicks_from_expert_with_tick_rule(
+            ex_notes,
+            expert_by_tick,
+            time_sigs,
+            tpb,
+            lambda t: _is_kick_on_quarter_beat_in_bar(t, tpb, time_sigs),
+        )
+    )
+    out.sort(key=lambda n: (n.tick, n.lane, n.is_cymbal))
+    return _drums_chart_from_expert_base(expert, "Hard", out)
+
+
+def _filter_faster_than_sixteenth(
+    notes: List[DrumNote],
+    tpb: int,
+    expert_by_tick: Optional[Dict[int, List[DrumNote]]] = None,
+) -> List[DrumNote]:
+    """
+    Per voice (lane, is_cymbal): greedy retain by time, drop a note if gap from
+    the previous *kept* in that voice is < one 1/16 note.
+    Toms in Hard share one voice; here (Medium) Y/B/G toms and cymbals are separate
+    voices, matching filter_fast_clusters' Easy/Medium style.
+    Não aplica a voz do bumbo nem a do crash (G-cym) nesse *tick* quando a entrada
+    já tem bumbo+crash (verde) juntos, para não deixar cair o padrão denso
+    a seguir a outro G (crash). No Medium, `expert_by_tick` reaproveita o mesmo
+    sítio ainda com crash só (bumbo aqui ou omitido — proteção do crash (verde)).
+    """
+    if not notes:
+        return notes
+    sixteenth = max(1, tpb // 4)  # one 1/16 note
+    by_tick: Dict[int, List[DrumNote]] = defaultdict(list)
+    for n in notes:
+        by_tick[n.tick].append(n)
+    # Mesmo no Medium denso, não deixar cair bumbo+crash (verde) no mesmo tick
+    # só porque outro G (crash) a 1/16; vozes bumbo e crash (G-cym) têm isenção a esse par.
+    bumbo_crash_ticks: Set[int] = set()
+    for t, grp in by_tick.items():
+        if not any(m.lane == LANE_KICK and not m.is_2x_kick for m in grp):
+            continue
+        if not any(m.lane == LANE_GREEN and m.is_cymbal for m in grp):
+            continue
+        bumbo_crash_ticks.add(t)
+    if expert_by_tick is not None:
+        bumbo_crash_ticks |= _medium_foot_protection_ticks_from_expert(
+            expert_by_tick
+        )
+
+    voices: Dict[str, List[DrumNote]] = defaultdict(list)
+    for n in notes:
+        if n.lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and n.is_cymbal:
+            voice_id = f"cym{n.lane}"
+        else:
+            voice_id = f"L{n.lane}"
+        voices[voice_id].append(n)
+
+    out: List[DrumNote] = []
+    for voice_id, vnotes in voices.items():
+        vnotes.sort(key=lambda x: x.tick)
+        last_tick: Optional[int] = None
+        for n in vnotes:
+            dist_ok = last_tick is None or n.tick - last_tick >= sixteenth
+            n_is_bumbo = voice_id == f"L{LANE_KICK}"
+            n_is_crash = voice_id == f"cym{LANE_GREEN}"
+            if dist_ok or (
+                n.tick in bumbo_crash_ticks
+                and (n_is_bumbo or n_is_crash)
+            ):
+                out.append(n)
+                last_tick = n.tick
+    out.sort(key=lambda n: (n.tick, n.lane, n.is_cymbal))
+    return out
+
+
+def _cym_metal_min_quarter_of_bar_ticks(
+    tick: int, tpb: int, time_sigs: List[Tuple[int, int, int]]
+) -> int:
+    """
+    1/4 de compasso no TS ativo: distância mínima no Medium entre *qualquer* prato
+    (Y=hi-hat, B=ride, G=crash) no mesmo eixo de tempo, em 4/4 = uma semínima em ticks.
+    """
+    _, num, den = _active_time_signature_at(tick, time_sigs)
+    mlen = _measure_len_ticks(num, den, tpb)
+    return max(1, mlen // 4)
+
+
+def _filter_medium_cymbals_min_quarter_of_bar(
+    notes: List[DrumNote],
+    tpb: int,
+    time_sigs: List[Tuple[int, int, int]],
+    expert_by_tick: Optional[Dict[int, List[DrumNote]]] = None,
+) -> List[DrumNote]:
+    """
+    Pratos: hi-hat (Y), **ride (B)**, **crash (G)** — Pro Drums, `is_cymbal`, numa voz
+    de tempo comum, gap >= 1/4 de compasso (ver `_cym_metal_min_quarter_of_bar_ticks`).
+
+    Se dois fiquem demasiado próximos, dá prioridade a quem cai no mesmo tick
+    que a snare (o outro cai; se empata, fica o primeiro no tempo).
+    Crash (verde) alinhado a bumbo (na chart ou só no Expert p/ Medium) não ser
+    descartado por outro prato recente — padrão bumbo+crash do Expert.
+    """
+    if not notes:
+        return notes
+    sgs = time_sigs if time_sigs else [(0, 4, 4)]
+    snare_ticks: Set[int] = {n.tick for n in notes if n.lane == LANE_SNARE}
+    other: List[DrumNote] = []
+    cymbals: List[DrumNote] = []
+    for n in notes:
+        is_pro_cym = n.lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN) and n.is_cymbal
+        if is_pro_cym:
+            cymbals.append(n)
+        else:
+            other.append(n)
+    if not cymbals:
+        return notes
+    ticks_foot: Set[int] = {
+        n.tick
+        for n in other
+        if n.lane == LANE_KICK and not n.is_2x_kick
+    }
+    if expert_by_tick is not None:
+        ticks_foot |= _medium_foot_protection_ticks_from_expert(expert_by_tick)
+
+    def _last_kept_is_crash_cym_with_foot(
+        t: Optional[int], m: Optional[DrumNote]
+    ) -> bool:
+        if t is None or m is None:
+            return False
+        return m.lane == LANE_GREEN and m.is_cymbal and t in ticks_foot
+
+    cymbals.sort(key=lambda n: (n.tick, n.lane))
+    kept: List[DrumNote] = []
+    last_tick: Optional[int] = None
+    last_metal: Optional[DrumNote] = None
+    for n in cymbals:
+        if last_tick is not None and last_metal is not None:
+            g_low = _cym_metal_min_quarter_of_bar_ticks(last_tick, tpb, sgs)
+            g_hi = _cym_metal_min_quarter_of_bar_ticks(n.tick, tpb, sgs)
+            min_ok = max(g_low, g_hi)
+            if n.tick - last_tick < min_ok:
+                crash_cym_mesmo_tick_que_bumbo = (
+                    n.lane == LANE_GREEN
+                    and n.is_cymbal
+                    and n.tick in ticks_foot
+                )
+                if crash_cym_mesmo_tick_que_bumbo:
+                    kept.append(n)
+                    last_metal = n
+                    last_tick = n.tick
+                    continue
+                last_s = last_tick in snare_ticks
+                n_s = n.tick in snare_ticks
+                if n_s and not last_s:
+                    if not _last_kept_is_crash_cym_with_foot(last_tick, last_metal):
+                        kept.pop()
+                        kept.append(n)
+                        last_metal = n
+                        last_tick = n.tick
+                continue
+        kept.append(n)
+        last_metal = n
+        last_tick = n.tick
+    out = other + kept
+    out.sort(key=lambda x: (x.tick, x.lane, x.is_cymbal))
+    return out
+
+
+def _expert_ticks_kick_with_non_kick_midi(
+    expert_by_tick: Dict[int, List[DrumNote]]
+) -> Set[int]:
+    """
+    Ticks do Expert com kick (não 2x) + outra voz, sem snare+tom a bloquear
+    a linha (como no Medium) — sítios onde bumbo costuma acompanhar mãos.
+    """
+    s: Set[int] = set()
+    for t, grp in expert_by_tick.items():
+        if not any(n.lane == LANE_KICK and not n.is_2x_kick for n in grp):
+            continue
+        if _expert_group_has_snare_or_tom(grp):
+            continue
+        if not any(
+            n.lane != LANE_KICK and not n.is_2x_kick for n in grp
+        ):
+            continue
+        s.add(t)
+    return s
+
+
+def _nudge_solo_kicks_toward_nearest_grouped(
+    notes: List[DrumNote], expert_by_tick: Dict[int, List[DrumNote]]
+) -> List[DrumNote]:
+    """
+    Remonta a lista de notas: tick só com bumbo, sem mão, aproxima o bumbo
+    do tick com outra nota mais perto, preferindo ticks do Expert com
+    kick+outro hit; se não houver, qualquer tick que já tenha mão.
+    """
+    for _ in range(800):
+        by: Dict[int, List[DrumNote]] = defaultdict(list)
+        for n in notes:
+            by[n.tick].append(n)
+        solo: List[int] = []
+        for t, g in by.items():
+            if not g:
+                continue
+            if all(n.lane == LANE_KICK for n in g):
+                solo.append(t)
+        if not solo:
+            return notes
+        tick_ex_paired = _expert_ticks_kick_with_non_kick_midi(expert_by_tick)
+        ticks_com_mao: Set[int] = {
+            t
+            for t, g in by.items()
+            if any(n.lane != LANE_KICK for n in g)
+        }
+        t0 = min(solo)
+        # Expert "paired" só se no Medium ainda houver mão nesse tick — senão
+        # mover o bumbo para aí cria de novo tick só bumbo (ou repõe 29952).
+        paired_que_ja_tem_mao: Set[int] = tick_ex_paired & ticks_com_mao
+
+        def _nearest(anchor: int, pool: Set[int]) -> Optional[int]:
+            cands = [u for u in pool if u != anchor]
+            if not cands:
+                return None
+            return min(cands, key=lambda u: abs(u - anchor))
+
+        u0: Optional[int] = None
+        if paired_que_ja_tem_mao:
+            u0 = _nearest(t0, paired_que_ja_tem_mao)
+        if u0 is None:
+            u0 = _nearest(t0, ticks_com_mao)
+        if u0 is None:
+            return [n for n in notes if not (n.lane == LANE_KICK and n.tick == t0)]
+        v_kick = _kick_velocity_for_tick(expert_by_tick, u0)
+        sem_k0 = [n for n in notes if not (n.lane == LANE_KICK and n.tick == t0)]
+        ja_kick = any(n.lane == LANE_KICK and n.tick == u0 for n in sem_k0)
+        if not ja_kick:
+            sem_k0.append(
+                DrumNote(
+                    tick=u0,
+                    lane=LANE_KICK,
+                    is_cymbal=False,
+                    velocity=v_kick,
+                )
+            )
+        notes = sem_k0
+        notes.sort(key=lambda n: (n.tick, n.lane, n.is_cymbal))
+    return notes
+
+
+def _reduce_drums_expert_to_medium(expert: DrumChart) -> DrumChart:
+    """
+    Medium a partir do Expert:
+    1) Kick **só no 1.º tempo** do compasso (não bumbo no padrão crash+foot do
+       Expert fora disso), com as mesmas exclusões de snare/tom. O Hard
+       continua a aceitar semínimas no compasso. Nunca kick com snare ou tom
+       (Y/B/G pad) no mesmo tick, ainda que exista prato nesse tick.
+    2) Eliminar qualquer voz com intervalo < 1/16 entre notas consecutivas
+       (por lane/cym, como em _filter_faster_than_sixteenth).
+    3) Pratos (Y=hi-hat, B=ride, G=crash) com is_cymbal: espaçamento >= 1/4 de
+       compasso; se ainda forem demasiado perto, preferir o que cai com a
+       snare. **Crash (verde) com bumbo nesse tick** fica (não cair o crash
+       por hi-hat, ride, etc. a 1/4 de bar).
+    4) Bumbo nunca fica sozinho no tick: se sobrar só pedal, reaproxima do
+       tick (Expert) com kick+outro hit, senão do tick com mão mais perto.
+    """
+    tpb = expert.ticks_per_beat
+    time_sigs = list(expert.time_signatures) if expert.time_signatures else [(0, 4, 4)]
+    ex_notes = [n for n in expert.notes if not n.is_2x_kick]
+    expert_by_tick = _expert_by_tick_excluding_2x(expert)
+    out: List[DrumNote] = []
+    for n in ex_notes:
+        if n.lane == LANE_KICK:
+            continue
+        out.append(
+            DrumNote(
+                tick=n.tick,
+                lane=n.lane,
+                is_cymbal=n.is_cymbal,
+                velocity=n.velocity,
+            )
+        )
+    out.extend(
+        _kicks_from_expert_with_tick_rule(
+            ex_notes,
+            expert_by_tick,
+            time_sigs,
+            tpb,
+            lambda t: _medium_tick_allows_kick(
+                t, tpb, time_sigs, expert_by_tick
+            ),
+        )
+    )
+    out.sort(key=lambda n: (n.tick, n.lane, n.is_cymbal))
+    out = _filter_faster_than_sixteenth(out, tpb, expert_by_tick)
+    out = _filter_medium_cymbals_min_quarter_of_bar(
+        out, tpb, time_sigs, expert_by_tick
+    )
+    out = _nudge_solo_kicks_toward_nearest_grouped(out, expert_by_tick)
+    return _drums_chart_from_expert_base(expert, "Medium", out)
 
 
 def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
     """Pipeline completo de redução de drums."""
     tpb = expert.ticks_per_beat
+    if target_diff == "Hard":
+        return _reduce_drums_expert_to_hard(expert)
+    if target_diff == "Medium":
+        return _reduce_drums_expert_to_medium(expert)
     target = TOM_RATIOS[target_diff]
     lane_consol = detect_lane_consolidation(expert)
-    green_cym_strategy = detect_green_cym_strategy(expert)
 
     # Index Expert por tick (para checar paired kick)
     expert_by_tick: Dict[int, List[DrumNote]] = defaultdict(list)
@@ -132,7 +607,7 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
         for n in chosen:
             kept_notes.append(DrumNote(tick=n.tick, lane=dst_lane, is_cymbal=False, velocity=n.velocity))
 
-    # ---- Cymbals (Y/B/G) — D-R1, D-R1.1, D-R10, D-R11 ----
+    # ---- Cymbals (Y/B/G) — D-R1, D-R1.1, D-R11 (lane da cor Expert, sem G→B) ----
     for src_lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN):
         cym_notes = by_lane_cym.get((src_lane, True), [])
         if not cym_notes: continue
@@ -149,29 +624,41 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
         n_keep = max(0, round(len(cym_notes) * cym_target))
         chosen = sorted(cym_notes, key=lambda n: -score(n))[:n_keep]
         for n in chosen:
-            # G-cym pode virar B-cym em Hard (D-R10) ou em E/M (consistência visual)
-            if src_lane == LANE_GREEN and green_cym_strategy == "to_blue_cym":
-                kept_notes.append(DrumNote(tick=n.tick, lane=LANE_BLUE, is_cymbal=True, velocity=n.velocity))
-            else:
-                kept_notes.append(DrumNote(tick=n.tick, lane=src_lane, is_cymbal=True, velocity=n.velocity))
+            kept_notes.append(
+                DrumNote(
+                    tick=n.tick,
+                    lane=src_lane,
+                    is_cymbal=True,
+                    velocity=n.velocity,
+                )
+            )
 
-    # ---- Kick (D-R3, D-R4) — só paired em E/M ----
+    # ---- Kick (D-R3, D-R4) — sem pedal no Easy; E/M: só paired (D-R3) ----
     kick_notes = by_lane_cym.get((LANE_KICK, False), [])
-    if kick_notes:
-        # Filtrar paired vs solo
-        paired = [n for n in kick_notes if is_paired_kick(n, expert_by_tick)]
-        solo = [n for n in kick_notes if not is_paired_kick(n, expert_by_tick)]
-        if target_diff in ("Easy", "Medium"):
-            # Só paired (D-R3)
+    if kick_notes and target_diff != "Easy":
+        paired = [k for k in kick_notes if is_paired_kick(k, expert_by_tick)]
+        if target_diff == "Medium":
             n_keep = max(0, round(len(kick_notes) * target[LANE_KICK]))
             chosen = sorted(paired, key=lambda n: -score(n))[:n_keep]
-        else:  # Hard
+        else:
             n_keep = max(0, round(len(kick_notes) * target[LANE_KICK]))
-            # Hard prefere paired mas pode pegar solo
-            ranked = sorted(kick_notes, key=lambda n: -(score(n) + (20 if is_paired_kick(n, expert_by_tick) else 0)))
+            ranked = sorted(
+                kick_notes,
+                key=lambda n: -(
+                    score(n)
+                    + (20 if is_paired_kick(n, expert_by_tick) else 0)
+                ),
+            )
             chosen = ranked[:n_keep]
         for n in chosen:
-            kept_notes.append(DrumNote(tick=n.tick, lane=LANE_KICK, is_cymbal=False, velocity=n.velocity))
+            kept_notes.append(
+                DrumNote(
+                    tick=n.tick,
+                    lane=LANE_KICK,
+                    is_cymbal=False,
+                    velocity=n.velocity,
+                )
+            )
 
     # Sort final
     kept_notes.sort(key=lambda n: (n.tick, n.lane))
@@ -183,9 +670,13 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
         kept_notes = filter_fast_clusters(kept_notes, tpb, target_diff)
 
     return DrumChart(
-        difficulty=target_diff, ticks_per_beat=tpb, notes=kept_notes,
-        overdrive=list(expert.overdrive), drum_fills=list(expert.drum_fills),
+        difficulty=target_diff,
+        ticks_per_beat=tpb,
+        notes=kept_notes,
+        overdrive=list(expert.overdrive),
+        drum_fills=list(expert.drum_fills),
         cymbal_flags=dict(expert.cymbal_flags),
+        time_signatures=list(expert.time_signatures),
     )
 
 
