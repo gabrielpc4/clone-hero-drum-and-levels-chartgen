@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
@@ -52,29 +53,31 @@ public partial class CymbalAlternationWindow : Window
                 throw new InvalidOperationException("Please select a MIDI file.");
             }
 
-            if (CymbalComboBox.SelectedItem is not CymbalType cymbalType)
-            {
-                throw new InvalidOperationException("Please select a cymbal.");
-            }
-
             if (_intervalItems.Count == 0)
             {
                 throw new InvalidOperationException("Please add at least one interval with the + button.");
             }
 
             ExecuteButton.IsEnabled = false;
+            IReadOnlyList<(CymbalType Cymbal, long Start, long End)> withCymbals = _intervalItems
+                .Select(interval => (interval.Cymbal, interval.StartTick, interval.EndTick))
+                .ToList();
+            string cymbalsLine = string.Join(
+                ", ",
+                withCymbals
+                    .Select(x => x.Cymbal)
+                    .Distinct()
+                    .Select(CymbalAlternationFormat.FormatCymbal)
+                    .OrderBy(name => name));
             CymbalAlternationResult result = CymbalAlternationService.ApplyAlternation(
                 midiPath: midiPath,
-                cymbalType: cymbalType,
-                intervals: _intervalItems
-                    .Select(interval => (interval.StartTick, interval.EndTick))
-                    .ToList()
+                intervals: withCymbals
             );
 
             var messageBuilder = new StringBuilder();
             messageBuilder.AppendLine("Alternation completed.");
             messageBuilder.AppendLine("File: " + result.MidiPath);
-            messageBuilder.AppendLine("Cymbal: " + result.CymbalType);
+            messageBuilder.AppendLine("Cymbals in intervals: " + cymbalsLine);
             messageBuilder.AppendLine("Intervals: " + result.IntervalCount);
             messageBuilder.AppendLine("Combined tick range: " + result.StartTick + " to " + result.EndTick);
             messageBuilder.AppendLine("Candidate cymbal notes: " + result.CandidateCount);
@@ -95,6 +98,11 @@ public partial class CymbalAlternationWindow : Window
     {
         try
         {
+            if (CymbalComboBox.SelectedItem is not CymbalType defaultCymbal)
+            {
+                throw new InvalidOperationException("Please select a cymbal for the new interval.");
+            }
+
             if (!long.TryParse(StartTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long startTick))
             {
                 throw new InvalidOperationException("Start tick must be an integer.");
@@ -115,14 +123,16 @@ public partial class CymbalAlternationWindow : Window
                 throw new InvalidOperationException("End tick must be >= start tick.");
             }
 
-            bool alreadyExists = _intervalItems.Any(interval => interval.StartTick == startTick && interval.EndTick == endTick);
+            bool alreadyExists = _intervalItems.Any(interval => interval.Cymbal == defaultCymbal
+                && interval.StartTick == startTick
+                && interval.EndTick == endTick);
             if (alreadyExists)
             {
                 throw new InvalidOperationException("This interval is already in the list.");
             }
 
-            _intervalItems.Add(new TickIntervalItem(startTick, endTick));
-            ResultTextBox.Text = "Interval added: " + startTick + " to " + endTick;
+            _intervalItems.Add(new TickIntervalItem(defaultCymbal, startTick, endTick));
+            ResultTextBox.Text = "Interval added: " + CymbalAlternationFormat.FormatCymbal(defaultCymbal) + " " + startTick + " to " + endTick;
         }
         catch (Exception ex)
         {
@@ -139,17 +149,21 @@ public partial class CymbalAlternationWindow : Window
         }
 
         _intervalItems.Remove(selectedItem);
-        ResultTextBox.Text = "Interval removed: " + selectedItem.StartTick + " to " + selectedItem.EndTick;
+        ResultTextBox.Text = "Interval removed: " + selectedItem;
     }
+
 }
 
 internal sealed class TickIntervalItem
 {
-    internal TickIntervalItem(long startTick, long endTick)
+    internal TickIntervalItem(CymbalType cymbal, long startTick, long endTick)
     {
+        Cymbal = cymbal;
         StartTick = startTick;
         EndTick = endTick;
     }
+
+    internal CymbalType Cymbal { get; }
 
     internal long StartTick { get; }
 
@@ -157,6 +171,29 @@ internal sealed class TickIntervalItem
 
     public override string ToString()
     {
-        return "Start: " + StartTick + " | End: " + EndTick;
+        return CymbalAlternationFormat.FormatCymbal(Cymbal) + " | Start: " + StartTick + " | End: " + EndTick;
+    }
+}
+
+internal static class CymbalAlternationFormat
+{
+    internal static string FormatCymbal(CymbalType cymbalType)
+    {
+        if (cymbalType == CymbalType.Yellow)
+        {
+            return "yellow";
+        }
+
+        if (cymbalType == CymbalType.Blue)
+        {
+            return "blue";
+        }
+
+        if (cymbalType == CymbalType.Green)
+        {
+            return "green";
+        }
+
+        return cymbalType.ToString();
     }
 }

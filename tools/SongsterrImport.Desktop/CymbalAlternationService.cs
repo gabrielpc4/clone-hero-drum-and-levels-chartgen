@@ -25,12 +25,11 @@ internal sealed class CymbalAlternationResult
     internal long EndTick { get; init; }
 
     internal string MidiPath { get; init; } = string.Empty;
-
-    internal CymbalType CymbalType { get; init; }
 }
 
 internal static class CymbalAlternationService
 {
+    /// <summary>Single cymbal, single [start, end] tick range.</summary>
     internal static CymbalAlternationResult ApplyAlternation(
         string midiPath,
         CymbalType cymbalType,
@@ -40,18 +39,30 @@ internal static class CymbalAlternationService
     {
         return ApplyAlternation(
             midiPath,
-            cymbalType,
-            new List<(long start, long end)>
+            new List<(CymbalType Cymbal, long Start, long End)>
             {
-                (startTick, endTick)
+                (cymbalType, startTick, endTick)
             }
         );
     }
 
+    /// <summary>One cymbal, many tick ranges (same as before, but named intervals).</summary>
     internal static CymbalAlternationResult ApplyAlternation(
         string midiPath,
         CymbalType cymbalType,
         IReadOnlyList<(long start, long end)> intervals
+    )
+    {
+        IReadOnlyList<(CymbalType Cymbal, long Start, long End)> withCymbal = intervals
+            .Select(interval => (cymbalType, interval.start, interval.end))
+            .ToList();
+        return ApplyAlternation(midiPath, withCymbal);
+    }
+
+    /// <summary>Many intervals, each with its own cymbal (yellow/blue/green) for the same MIDI file.</summary>
+    internal static CymbalAlternationResult ApplyAlternation(
+        string midiPath,
+        IReadOnlyList<(CymbalType Cymbal, long Start, long End)> intervals
     )
     {
         if (!File.Exists(midiPath))
@@ -64,50 +75,69 @@ internal static class CymbalAlternationService
             throw new InvalidOperationException("Please add at least one interval.");
         }
 
-        foreach ((long start, long end) intervalValue in intervals)
+        foreach ((CymbalType cymbalType, long start, long end) in intervals)
         {
-            if (intervalValue.start < 0)
+            if (start < 0)
             {
                 throw new InvalidOperationException("Start tick must be >= 0.");
             }
 
-            if (intervalValue.end < intervalValue.start)
+            if (end < start)
             {
                 throw new InvalidOperationException("End tick must be >= start tick.");
             }
         }
 
         MidiFile midiFile = MidiFile.Read(midiPath);
-        TrackChunk targetTrack = ResolvePartDrumsTrack(midiFile, cymbalType);
-
-        int cymbalPitch = 96 + (int)cymbalType;
-        int tomMarkerPitch = cymbalType switch
-        {
-            CymbalType.Yellow => 110,
-            CymbalType.Blue => 111,
-            CymbalType.Green => 112,
-            _ => throw new InvalidOperationException("Unknown cymbal type.")
-        };
-
-        List<(long start, long end)> tomIntervals = BuildTomIntervals(targetTrack, tomMarkerPitch);
-
-        using var notesManager = targetTrack.ManageNotes();
-        List<Note> candidateNotes = notesManager.Objects
-            .Where(note => (int)note.NoteNumber == cymbalPitch)
-            .Where(note => IsInsideAnyInterval(note.Time, intervals))
-            .Where(note => !IsTickInsideTomInterval(note.Time, tomIntervals))
-            .OrderBy(note => note.Time)
+        int totalRemoved = 0;
+        int totalCandidates = 0;
+        int intervalCount = intervals.Count;
+        long minStart = intervals.Min(x => x.Start);
+        long maxEnd = intervals.Max(x => x.End);
+        List<IGrouping<CymbalType, (CymbalType Cymbal, long Start, long End)>> byCymbal = intervals
+            .GroupBy(x => x.Cymbal)
             .ToList();
 
-        List<Note> notesToRemove = new();
-        for (int index = 1; index < candidateNotes.Count; index += 2)
+        foreach (IGrouping<CymbalType, (CymbalType Cymbal, long Start, long End)> group in byCymbal)
         {
-            notesToRemove.Add(candidateNotes[index]);
-        }
+            CymbalType cymbalType = group.Key;
+            List<(long start, long end)> tickRanges = group.Select(x => (x.Start, x.End)).ToList();
 
-        foreach (Note note in notesToRemove)
-        {
-            notesManager.Objects.Remove(note);
+            TrackChunk targetTrack = ResolvePartDrumsTrack(midiFile, cymbalType);
+
+            int cymbalPitch = 96 + (int)cymbalType;
+            int tomMarkerPitch = cymbalType switch
+            {
+                CymbalType.Yellow => 110,
+                CymbalType.Blue => 111,
+                CymbalType.Green => 112,
+                _ => throw new InvalidOperationException("Unknown cymbal type.")
+            };
+
+            List<(long start, long end)> tomIntervals = BuildTomIntervals(targetTrack, tomMarkerPitch);
+
+            using var notesManager = targetTrack.ManageNotes();
+            List<Note> candidateNotes = notesManager.Objects
+                .Where(note => (int)note.NoteNumber == cymbalPitch)
+                .Where(note => IsInsideAnyInterval(note.Time, tickRanges))
+                .Where(note => !IsTickInsideTomInterval(note.Time, tomIntervals))
+                .OrderBy(note => note.Time)
+                .ToList();
+
+            totalCandidates += candidateNotes.Count;
+
+            List<Note> notesToRemove = new();
+            for (int index = 1; index < candidateNotes.Count; index += 2)
+            {
+                notesToRemove.Add(candidateNotes[index]);
+            }
+
+            foreach (Note note in notesToRemove)
+            {
+                notesManager.Objects.Remove(note);
+            }
+
+            totalRemoved += notesToRemove.Count;
         }
 
         midiFile.Write(midiPath, overwriteFile: true);
@@ -115,12 +145,11 @@ internal static class CymbalAlternationService
         return new CymbalAlternationResult
         {
             MidiPath = midiPath,
-            CymbalType = cymbalType,
-            StartTick = intervals.Min(interval => interval.start),
-            EndTick = intervals.Max(interval => interval.end),
-            IntervalCount = intervals.Count,
-            CandidateCount = candidateNotes.Count,
-            RemovedCount = notesToRemove.Count
+            StartTick = minStart,
+            EndTick = maxEnd,
+            IntervalCount = intervalCount,
+            CandidateCount = totalCandidates,
+            RemovedCount = totalRemoved
         };
     }
 
