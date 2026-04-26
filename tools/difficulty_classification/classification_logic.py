@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import mido
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SRC_ROOT = _REPO_ROOT / "src"
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
 from baseline_data import BASELINE_DRUM_DIFFS
 from baseline_data import BASELINE_GUITAR_DIFFS
@@ -13,6 +19,8 @@ from baseline_data import GUITAR_SCALE_MAPPING
 from baseline_data import MANUAL_DRUM_OVERRIDES
 from baseline_data import MANUAL_GUITAR_OVERRIDES
 from baseline_data import MANUAL_VOCAL_OVERRIDES
+from songsterr_parsing.songsterr_import.vocal_source import collect_track_vocal_notes
+from songsterr_parsing.songsterr_import.vocal_source import select_source_vocal_track
 
 IGNORE_MIDI_FILENAMES = {
     "notes.mid",
@@ -308,33 +316,10 @@ def choose_drum_track(midi_file: mido.MidiFile) -> Optional[mido.MidiTrack]:
 
 
 def choose_vocal_track(midi_file: mido.MidiFile) -> Optional[mido.MidiTrack]:
-    scored_tracks: List[Tuple[int, int]] = []
-
-    for track_index, track in enumerate(midi_file.tracks):
-        track_name, note_count, _ = summarize_track(track)
-        lowered_name = track_name.lower()
-
-        if note_count == 0:
-            continue
-
-        if "vocal" not in lowered_name and "lyrics" not in lowered_name:
-            continue
-
-        score_value = note_count
-
-        if lowered_name == "vocals" or "lead vocals" in lowered_name or "lead vocal" in lowered_name:
-            score_value += 1000
-
-        if "backup" in lowered_name or "backing" in lowered_name or "harmony" in lowered_name:
-            score_value -= 500
-
-        scored_tracks.append((score_value, track_index))
-
-    if not scored_tracks:
+    try:
+        return select_source_vocal_track(midi_file).track
+    except RuntimeError:
         return None
-
-    best_index = max(scored_tracks)[1]
-    return midi_file.tracks[best_index]
 
 
 def categorize_drum_pitch(pitch_value: int) -> str:
@@ -414,8 +399,17 @@ def parse_vocal_metrics(track: Optional[mido.MidiTrack], ticks_per_beat: int) ->
     if track is None:
         return None
 
-    track_name, note_pairs = decode_note_pairs(track)
-    vocal_pairs = [note_pair for note_pair in note_pairs if note_pair["channel"] != 9]
+    track_name = summarize_track(track)[0]
+    vocal_pairs = [
+        {
+            "start_tick": note_value.start_tick,
+            "end_tick": note_value.end_tick,
+            "pitch": note_value.pitch,
+            "channel": note_value.channel,
+            "velocity": note_value.velocity,
+        }
+        for note_value in collect_track_vocal_notes(track)
+    ]
     grouped_events = group_note_events(vocal_pairs)
 
     if not grouped_events:
@@ -740,6 +734,54 @@ def apply_classification_to_song_ini(song_ini_path: Path, guitar_score: int, dru
     difficulty_lines.append("pro_drums = True")
 
     updated_lines = filtered_lines[:insert_index] + difficulty_lines + filtered_lines[insert_index:]
+    song_ini_path.write_text("\n".join(updated_lines) + "\n", encoding=encoding_name)
+
+
+def apply_vocal_classification_to_song_ini(song_ini_path: Path, vocal_score: Optional[int]) -> None:
+    original_lines, _, encoding_name = load_song_ini(song_ini_path)
+    filtered_lines: List[str] = []
+
+    for line in original_lines:
+        if "=" not in line:
+            filtered_lines.append(line)
+            continue
+
+        key_name = line.split("=", 1)[0].strip()
+        if key_name == "diff_vocals":
+            continue
+
+        filtered_lines.append(line)
+
+    if vocal_score is None:
+        song_ini_path.write_text("\n".join(filtered_lines) + "\n", encoding=encoding_name)
+        return
+
+    insert_index: Optional[int] = None
+
+    for index, line in enumerate(filtered_lines):
+        if "=" not in line:
+            continue
+
+        key_name = line.split("=", 1)[0].strip()
+        if key_name.startswith("diff_"):
+            insert_index = index + 1
+
+    if insert_index is None:
+        for index, line in enumerate(filtered_lines):
+            if line.strip().startswith("song_length ="):
+                insert_index = index + 1
+                break
+
+    if insert_index is None:
+        for index, line in enumerate(filtered_lines):
+            if line.strip().startswith("year ="):
+                insert_index = index + 1
+                break
+
+    if insert_index is None:
+        insert_index = 1 if filtered_lines else 0
+
+    updated_lines = filtered_lines[:insert_index] + [f"diff_vocals = {vocal_score}"] + filtered_lines[insert_index:]
     song_ini_path.write_text("\n".join(updated_lines) + "\n", encoding=encoding_name)
 
 

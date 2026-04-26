@@ -611,12 +611,14 @@ public partial class MainWindow : Window
         {
             GenerateDrumChartButton.IsEnabled = false;
             GenerateDifficultiesButton.IsEnabled = false;
+            GenerateVocalsButton.IsEnabled = false;
             GenerateAllDifficultiesInSongsButton.IsEnabled = false;
             return;
         }
 
         GenerateDrumChartButton.IsEnabled = true;
         GenerateDifficultiesButton.IsEnabled = true;
+        GenerateVocalsButton.IsEnabled = true;
         GenerateAllDifficultiesInSongsButton.IsEnabled = true;
     }
 
@@ -634,6 +636,11 @@ public partial class MainWindow : Window
     private void OnGenerateDifficultiesClick(object sender, RoutedEventArgs e)
     {
         _ = RunGenerateDifficultiesAsync();
+    }
+
+    private void OnGenerateVocalsClick(object sender, RoutedEventArgs e)
+    {
+        _ = RunGenerateVocalsAsync();
     }
 
     private void OnGenerateAllDifficultiesInSongsClick(object sender, RoutedEventArgs e)
@@ -658,6 +665,7 @@ public partial class MainWindow : Window
     private string ImportScript => Path.Combine(RepoRoot, "src", "songsterr_parsing", "import_songsterr.py");
     private string SyncScript => Path.Combine(RepoRoot, "copy_song_to_clone_hero.ps1");
     private string GenerateDifficultiesScript => Path.Combine(RepoRoot, "tools", "generate_difficulties_midi.py");
+    private string GenerateVocalsScript => Path.Combine(RepoRoot, "tools", "generate_vocals_midi.py");
 
     private IReadOnlyDictionary<string, string> BuildPythonEnv() =>
         new Dictionary<string, string>
@@ -902,6 +910,106 @@ public partial class MainWindow : Window
             else
             {
                 LogProgress.Report(">> Generate Difficulties failed (exit " + code + ").");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogProgress.Report("ERROR: " + ex);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task RunGenerateVocalsAsync()
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        if (!File.Exists(GenerateVocalsScript))
+        {
+            string scriptDisplay = RepositoryPaths.ToPathBelowRepository(GenerateVocalsScript, RepoPathForResolve);
+            System.Windows.MessageBox.Show("Script not found: " + scriptDisplay, "Generate Vocals", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        string sourceMidiPath = ResolveDetectedSongsterrInputMidiPath();
+        if (string.IsNullOrEmpty(sourceMidiPath))
+        {
+            string sourceFolderPath = RepositoryPaths.ResolveToFullPath(_pathSyncSourceFolderBelowRepo, RepoPathForResolve);
+            string folderText = sourceFolderPath.Length == 0
+                ? "(nenhuma pasta selecionada)"
+                : RepositoryPaths.ToPathBelowRepository(sourceFolderPath, RepoPathForResolve);
+
+            System.Windows.MessageBox.Show(
+                "Nao encontrei MIDI manual com track vocal na pasta da musica.\n\n"
+                + "Padrao esperado: terminar com MM-DD-YYYY.mid\n\n"
+                + "Pasta atual: " + folderText,
+                "Generate Vocals",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
+            return;
+        }
+
+        string? notesFullPath = TryResolveSongsDestNotesMidFullPath();
+        if (string.IsNullOrEmpty(notesFullPath) || !File.Exists(notesFullPath))
+        {
+            string display = notesFullPath is { Length: > 0 } pathValue
+                ? pathValue
+                : Path.Combine(RepoRoot, "Songs", _syncSongsSubfolderName.Trim(), "notes.mid");
+            System.Windows.MessageBox.Show(
+                "Could not find notes.mid in the Clone Hero song folder. Run import + sync first, or add the file yourself.\n\n"
+                + "Expected path:\n" + display,
+                "Generate Vocals",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
+            return;
+        }
+
+        string customSongDir = RepositoryPaths.ResolveToFullPath(_pathSyncSourceFolderBelowRepo, RepoPathForResolve);
+        if (string.IsNullOrWhiteSpace(customSongDir) || !Directory.Exists(customSongDir))
+        {
+            System.Windows.MessageBox.Show(
+                "Select a track in the list so the custom song folder can be resolved.",
+                "Generate Vocals",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
+            return;
+        }
+
+        SetBusy(true);
+        try
+        {
+            var args = new List<string>
+            {
+                GenerateVocalsScript,
+                notesFullPath,
+                sourceMidiPath,
+                "--custom-song-dir",
+                customSongDir,
+            };
+            int code = await ProcessRunner.RunWithLogAsync(
+                Py,
+                args,
+                RepoRoot,
+                BuildPythonEnv(),
+                LogProgress,
+                _cts.Token
+            );
+            if (code == 0)
+            {
+                LogProgress.Report(">> Generate Vocals completed successfully.");
+                LoadSongs();
+            }
+            else
+            {
+                LogProgress.Report(">> Generate Vocals failed (exit " + code + ").");
             }
         }
         catch (Exception ex)
