@@ -73,6 +73,7 @@ def transpose_chord_shape(expert_frets: Tuple[int, ...], allowed: Tuple[int, ...
     """Acha posição que preserva o shape do acorde dentro de allowed e fica perto do anchor."""
     if not expert_frets: return expert_frets
     if all(f in allowed for f in expert_frets): return expert_frets
+    expert_centroid = sum(expert_frets) / len(expert_frets)
     base = expert_frets[0]
     intervals = tuple(f - base for f in expert_frets)
     candidates: List[Tuple[int, ...]] = []
@@ -94,8 +95,17 @@ def transpose_chord_shape(expert_frets: Tuple[int, ...], allowed: Tuple[int, ...
         m = max(allowed)
         return tuple(min(m, f) for f in expert_frets)
     if anchor_fret is None:
-        anchor_fret = sum(expert_frets) / len(expert_frets)
-    candidates.sort(key=lambda c: abs(sum(c)/len(c) - anchor_fret))
+        anchor_fret = expert_centroid
+
+    def candidate_sort_key(candidate: Tuple[int, ...]) -> Tuple[float, float, float]:
+        candidate_centroid = sum(candidate) / len(candidate)
+        return (
+            abs(candidate_centroid - expert_centroid),
+            abs(candidate_centroid - anchor_fret),
+            abs(candidate[0] - expert_frets[0]),
+        )
+
+    candidates.sort(key=candidate_sort_key)
     return candidates[0]
 
 
@@ -108,6 +118,80 @@ def reduce_single_fret(fret: int, allowed: Tuple[int, ...],
     if fret > max(allowed): return max(allowed)
     if fret < min(allowed): return min(allowed)
     return fret
+
+
+def reduce_triple_chord_to_double(expert_frets: Tuple[int, ...]) -> Tuple[int, ...]:
+    """
+    Escolhe um equivalente de 2 notas para acordes de 3 notas.
+
+    Regra:
+    - shape equilibrado -> extremos
+    - shape mais "apertado" embaixo -> par de baixo
+    - shape mais "apertado" em cima -> par de cima
+
+    Isso evita colapsar shapes diferentes no mesmo par quando o Expert muda o
+    desenho do acorde para sugerir região mais alta ou mais baixa.
+    """
+    if len(expert_frets) <= 2:
+        return expert_frets
+
+    if len(expert_frets) != 3:
+        return (expert_frets[0], expert_frets[-1])
+
+    low_fret = expert_frets[0]
+    middle_fret = expert_frets[1]
+    high_fret = expert_frets[2]
+
+    lower_gap = middle_fret - low_fret
+    upper_gap = high_fret - middle_fret
+
+    if lower_gap == upper_gap:
+        return (low_fret, high_fret)
+
+    if lower_gap < upper_gap:
+        return (low_fret, middle_fret)
+
+    return (middle_fret, high_fret)
+
+
+def transpose_medium_double_chord(expert_frets: Tuple[int, int]) -> Tuple[int, ...]:
+    """
+    Medium (GRYB) para dyads com laranja:
+
+    Quando o acorde já cabe, mantém. Quando só o topo está em O, preferimos
+    preservar a nota de baixo e apenas "trazer o O para B". Isso evita que
+    progressões ascendentes diferentes virem o mesmo shape.
+
+    Exemplos:
+    - RO -> RB
+    - YO -> YB
+    - BO -> YB (evita BB)
+    """
+    if len(expert_frets) != 2:
+        return expert_frets
+
+    low_fret, high_fret = expert_frets
+
+    if high_fret <= 3:
+        return expert_frets
+
+    if high_fret != 4:
+        return expert_frets
+
+    target_high = 3
+
+    if low_fret < target_high:
+        return (low_fret, target_high)
+
+    shifted_pair = tuple(
+        max(0, fret_value - 1)
+        for fret_value in expert_frets
+    )
+
+    if len(set(shifted_pair)) == 2:
+        return shifted_pair
+
+    return (2, 3)
 
 
 def reduce_note(en: Note, diff: str, sub: int, isolated: bool,
@@ -129,8 +213,9 @@ def reduce_note(en: Note, diff: str, sub: int, isolated: bool,
             spread = en.frets[-1] - en.frets[0]
             # R17: power-chord mode mantém acordes mesmo em bursts (Chop Suey)
             if power_chord_mode and spread <= 3:
-                # Shape com 2 notas (lowest+highest do Expert), comprimido para caber em GRY
-                pair = (en.frets[0], en.frets[-1])
+                # Escolhe um shape de 2 notas que preserve a sensação de grave/agudo
+                # do acorde original antes de deslocar para o range do Easy.
+                pair = reduce_triple_chord_to_double(en.frets)
                 # Shift sistemático -1 (R14) preservando intervalo se possível
                 shifted = (pair[0] - 1, pair[1] - 1)
                 # Transpor para faixa permitida (mantém shape se cabe)
@@ -152,7 +237,11 @@ def reduce_note(en: Note, diff: str, sub: int, isolated: bool,
                     False, en.forced_hopo if diff == "Hard" else 0, False)
     new = en.frets
     if len(new) > cfg["max_chord_size"]:
-        new = (new[0], new[-1])
+        new = reduce_triple_chord_to_double(new)
+
+    if diff == "Medium" and len(new) == 2:
+        new = transpose_medium_double_chord(new)
+
     new = transpose_chord_shape(new, cfg["allowed_frets"], anchor)
     return Note(en.tick, en.end_tick, new, False,
                 en.forced_hopo if diff == "Hard" else 0, False)
@@ -168,6 +257,25 @@ def compute_section_anchors(expert: Chart, window_beats: int = 4):
     return {w: mean(fs) for w, fs in out.items() if fs}, win
 
 
+def compute_section_has_fret(
+    expert: Chart,
+    target_fret: int,
+    window_beats: int = 4,
+) -> Dict[int, bool]:
+    """Devolve dict[window_index] -> se existe ao menos uma nota com `target_fret`."""
+    tpb = expert.ticks_per_beat
+    win = tpb * window_beats
+    out: Dict[int, bool] = {}
+
+    for note_value in expert.notes:
+        if target_fret not in note_value.frets:
+            continue
+
+        out[note_value.tick // win] = True
+
+    return out
+
+
 def compute_window_fret_shift(expert_centroid: float, allowed_max: int, target_offset: float) -> int:
     """Quanto deslocar single notes desta janela:
        shift = round(target_centroid - expert_centroid).
@@ -175,6 +283,211 @@ def compute_window_fret_shift(expert_centroid: float, allowed_max: int, target_o
     target = max(0, expert_centroid + target_offset)
     shift = round(target - expert_centroid)
     return shift
+
+
+def _single_note_run_shift_for_allowed_range(
+    run_notes: List[Note],
+    allowed_frets: Tuple[int, ...],
+) -> int:
+    """
+    Escolhe um shift inteiro único para uma frase melódica de singles.
+
+    A ideia é preservar o contorno local quando o Expert/Hard "anda para a direita"
+    do braço. Em vez de clipar cada nota isoladamente, deslocamos a frase toda o
+    mínimo necessário para fazer o topo caber na dificuldade alvo.
+
+    Se a frase já cabe, não desloca.
+    """
+    if not run_notes:
+        return 0
+
+    run_frets = [note.frets[0] for note in run_notes if note.frets]
+
+    if not run_frets:
+        return 0
+
+    allowed_max = max(allowed_frets)
+    run_max = max(run_frets)
+
+    if run_max <= allowed_max:
+        return 0
+
+    return allowed_max - run_max
+
+
+def _single_note_run_ranges(
+    notes: List[Note],
+    tpb: int,
+    minimum_note_count: int = 1,
+    maximum_gap_override: Optional[int] = None,
+) -> List[Tuple[int, int]]:
+    """
+    Faixas [start, end) de frases contíguas de notas simples fretted.
+
+    Não atravessa opens nem acordes.
+    """
+    if not notes:
+        return []
+
+    max_gap = max(1, tpb // 2)
+
+    if maximum_gap_override is not None:
+        max_gap = max(1, int(maximum_gap_override))
+    run_ranges: List[Tuple[int, int]] = []
+    run_start_index: Optional[int] = None
+
+    previous_tick: Optional[int] = None
+
+    for note_index, note_value in enumerate(notes):
+        is_simple_fretted_note = (
+            not note_value.is_open
+            and len(note_value.frets) == 1
+        )
+
+        if not is_simple_fretted_note:
+            if (
+                run_start_index is not None
+                and (note_index - run_start_index) >= minimum_note_count
+            ):
+                run_ranges.append((run_start_index, note_index))
+            previous_tick = None
+            run_start_index = None
+            continue
+
+        if run_start_index is None:
+            run_start_index = note_index
+            previous_tick = note_value.tick
+            continue
+
+        if previous_tick is not None and (note_value.tick - previous_tick) > max_gap:
+            if (note_index - run_start_index) >= minimum_note_count:
+                run_ranges.append((run_start_index, note_index))
+            run_start_index = note_index
+
+        previous_tick = note_value.tick
+
+    if (
+        run_start_index is not None
+        and (len(notes) - run_start_index) >= minimum_note_count
+    ):
+        run_ranges.append((run_start_index, len(notes)))
+
+    return run_ranges
+
+
+def _single_note_run_shifts(
+    notes: List[Note],
+    tpb: int,
+    allowed_frets: Tuple[int, ...],
+) -> Dict[int, int]:
+    """
+    Dict[index_in_notes] -> shift para frases contíguas de notas simples fretted.
+
+    Não atravessa opens nem acordes. Também não deixa um único fret fora da
+    faixa "puxar" a frase inteira para a esquerda: o shift é aplicado só em
+    clusters locais que realmente precisam dele, com um pequeno lead-in.
+    """
+    if not notes:
+        return {}
+
+    max_gap = max(1, tpb // 2)
+    shifts_by_index: Dict[int, int] = {}
+    run_ranges = _single_note_run_ranges(notes, tpb)
+
+    for run_start_index, run_end_exclusive in run_ranges:
+        run_notes = notes[run_start_index:run_end_exclusive]
+        allowed_max = max(allowed_frets)
+        overflow_positions = [
+            local_index
+            for local_index, note_value in enumerate(run_notes)
+            if note_value.frets and note_value.frets[0] > allowed_max
+        ]
+
+        if not overflow_positions:
+            continue
+
+        cluster_start = overflow_positions[0]
+        cluster_end = overflow_positions[0]
+        cluster_ranges: List[Tuple[int, int]] = []
+
+        for local_index in overflow_positions[1:]:
+            previous_note = run_notes[cluster_end]
+            current_note = run_notes[local_index]
+
+            if (current_note.tick - previous_note.tick) > max_gap:
+                cluster_ranges.append((cluster_start, cluster_end))
+                cluster_start = local_index
+                cluster_end = local_index
+                continue
+
+            cluster_end = local_index
+
+        cluster_ranges.append((cluster_start, cluster_end))
+
+        for local_start, local_end in cluster_ranges:
+            shifted_start = local_start
+
+            if (
+                local_start > 0
+                and run_notes[local_start - 1].frets
+                and run_notes[local_start - 1].frets[0] == allowed_max
+            ):
+                shifted_start = local_start - 1
+
+            shifted_end_exclusive = min(len(run_notes), local_end + 2)
+            shift_notes = run_notes[shifted_start:shifted_end_exclusive]
+            run_shift = _single_note_run_shift_for_allowed_range(
+                shift_notes,
+                allowed_frets,
+            )
+
+            if run_shift == 0:
+                continue
+
+            for local_note_index in range(shifted_start, shifted_end_exclusive):
+                absolute_note_index = run_start_index + local_note_index
+                existing_shift = shifts_by_index.get(absolute_note_index, 0)
+                shifts_by_index[absolute_note_index] = min(existing_shift, run_shift)
+
+    return shifts_by_index
+
+
+def _easy_single_note_run_remaps(
+    notes: List[Note],
+    tpb: int,
+    allowed_frets: Tuple[int, ...],
+) -> Dict[int, int]:
+    """
+    Easy: em frases de singles com overflow, usa remapeamento cíclico (`fret % 3`)
+    para manter sensação de escala em vez de chapar tudo no topo.
+    """
+    if not notes:
+        return {}
+
+    lane_count = len(allowed_frets)
+    allowed_max = max(allowed_frets)
+    remaps_by_index: Dict[int, int] = {}
+    run_ranges = _single_note_run_ranges(
+        notes,
+        tpb,
+        minimum_note_count=4,
+        maximum_gap_override=tpb * 2,
+    )
+
+    for run_start_index, run_end_exclusive in run_ranges:
+        run_notes = notes[run_start_index:run_end_exclusive]
+
+        if not any(note_value.frets and note_value.frets[0] > allowed_max for note_value in run_notes):
+            continue
+
+        for local_note_index, note_value in enumerate(run_notes):
+            if not note_value.frets:
+                continue
+
+            original_fret = note_value.frets[0]
+            remaps_by_index[run_start_index + local_note_index] = original_fret % lane_count
+
+    return remaps_by_index
 
 
 def _time_sig_num_denom_at_tick(
@@ -190,6 +503,23 @@ def _time_sig_num_denom_at_tick(
     return time_sigs[i][1], time_sigs[i][2]
 
 
+def _time_sig_start_num_denom_at_tick(
+    time_sigs: List[Tuple[int, int, int]], tick: int
+) -> Tuple[int, int, int]:
+    """(start_tick, num, denom) do compasso ativo; sem mapa, assume 4/4 desde 0."""
+    if not time_sigs:
+        return 0, 4, 4
+
+    change_ticks = [s[0] for s in time_sigs]
+    i = bisect.bisect_right(change_ticks, tick) - 1
+
+    if i < 0:
+        return 0, 4, 4
+
+    start_tick, num, denom = time_sigs[i]
+    return start_tick, num, denom
+
+
 def _eighth_of_measure_ticks(tpb: int, num: int, denom: int) -> int:
     """
     Duração de 1/8 de compasso em ticks: `1/8 * (num * (1 batida))`.
@@ -202,22 +532,116 @@ def _eighth_of_measure_ticks(tpb: int, num: int, denom: int) -> int:
     return max(1, bar_ticks // 8)
 
 
-def _easy_enforce_min_gap_eighth_of_bar(
-    notes: List[Note], tpb: int, time_sigs: List[Tuple[int, int, int]]
+def _enforce_min_gap_fraction_of_bar(
+    notes: List[Note],
+    tpb: int,
+    time_sigs: List[Tuple[int, int, int]],
+    fraction_divisor: int,
 ) -> List[Note]:
     if not notes or tpb < 1:
         return notes
+
+    if fraction_divisor < 1:
+        return notes
+
     ordered = sorted(notes, key=lambda n: n.tick)
     out_list: List[Note] = []
     last_tick: Optional[int] = None
+
     for n in ordered:
         n_num, n_denom = _time_sig_num_denom_at_tick(time_sigs, n.tick)
-        need_gap = _eighth_of_measure_ticks(tpb, n_num, n_denom)
+        bar_ticks = max(1, _eighth_of_measure_ticks(tpb, n_num, n_denom) * 8)
+        need_gap = max(1, bar_ticks // fraction_divisor)
+
         if last_tick is not None and (n.tick - last_tick) < need_gap:
             continue
+
         out_list.append(n)
         last_tick = n.tick
+
     return out_list
+
+
+def _easy_enforce_min_gap_eighth_of_bar(
+    notes: List[Note], tpb: int, time_sigs: List[Tuple[int, int, int]]
+) -> List[Note]:
+    return _enforce_min_gap_fraction_of_bar(
+        notes,
+        tpb,
+        time_sigs,
+        fraction_divisor=8,
+    )
+
+
+def _easy_snap_to_beat_divisions_of_bar(
+    notes: List[Note],
+    tpb: int,
+    time_sigs: List[Tuple[int, int, int]],
+) -> List[Note]:
+    """
+    Easy: só permite notas nas divisões principais do compasso.
+
+    Em 4/4 isso vira 1, 2, 3, 4 (uma nota por semínima). Em outros compassos,
+    usa a unidade de batida da assinatura ativa (`denom`) e mantém no máximo
+    uma nota por beat-slot, escolhendo a mais próxima da linha do beat.
+    """
+    if not notes or tpb < 1:
+        return notes
+
+    ordered = sorted(notes, key=lambda n: n.tick)
+    best_note_by_slot: Dict[Tuple[int, int, int, int], Tuple[int, int, Note]] = {}
+
+    for note_value in ordered:
+        sig_start_tick, num, denom = _time_sig_start_num_denom_at_tick(
+            time_sigs,
+            note_value.tick,
+        )
+        beat_ticks = max(1, (tpb * 4) // max(1, denom))
+        slot_index = max(0, (note_value.tick - sig_start_tick) // beat_ticks)
+        snapped_tick = sig_start_tick + (slot_index * beat_ticks)
+        slot_key = (sig_start_tick, num, denom, slot_index)
+        distance_to_beat = abs(note_value.tick - snapped_tick)
+        candidate = (distance_to_beat, note_value.tick, note_value)
+        current_best = best_note_by_slot.get(slot_key)
+
+        if current_best is None or candidate < current_best:
+            best_note_by_slot[slot_key] = candidate
+
+    snapped_notes: List[Note] = []
+
+    for _, _, kept_note in sorted(best_note_by_slot.values(), key=lambda item: item[1]):
+        sig_start_tick, _, denom = _time_sig_start_num_denom_at_tick(
+            time_sigs,
+            kept_note.tick,
+        )
+        beat_ticks = max(1, (tpb * 4) // max(1, denom))
+        slot_index = max(0, (kept_note.tick - sig_start_tick) // beat_ticks)
+        snapped_tick = sig_start_tick + (slot_index * beat_ticks)
+        duration_ticks = max(0, kept_note.end_tick - kept_note.tick)
+        snapped_notes.append(
+            Note(
+                snapped_tick,
+                snapped_tick + duration_ticks,
+                kept_note.frets,
+                kept_note.is_open,
+                kept_note.forced_hopo,
+                kept_note.is_tap,
+            )
+        )
+
+    snapped_notes.sort(key=lambda n: n.tick)
+    return snapped_notes
+
+
+def _medium_enforce_min_gap_eighth_of_bar(
+    notes: List[Note], tpb: int, time_sigs: List[Tuple[int, int, int]]
+) -> List[Note]:
+    return _enforce_min_gap_fraction_of_bar(
+        notes,
+        tpb,
+        time_sigs,
+        fraction_divisor=8,
+    )
 
 
 def _chord_shape_ignoring_order(frets: Tuple[int, ...]) -> Tuple[int, ...]:
@@ -338,6 +762,7 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
     sustain_mode = classify_sustain_mode(expert)
     pc_mode = classify_power_chord_mode(expert)
     anchors, win = compute_section_anchors(expert)
+    section_has_orange = compute_section_has_fret(expert, FRET_LARANJA)
     notes = sorted(expert.notes, key=lambda n: n.tick)
     runs = find_runs(notes, tpb)
     in_burst = [False] * len(notes)
@@ -357,8 +782,31 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
     for w, exp_cent in anchors.items():
         if exp_cent > allowed_max:
             window_shift[w] = -int(round(exp_cent - allowed_max))
-        elif target_diff in ("Easy", "Medium") and exp_cent >= 1.5:
+        elif target_diff == "Easy" and exp_cent >= 1.5:
             window_shift[w] = -1
+        elif (
+            target_diff == "Medium"
+            and exp_cent >= 1.5
+            and section_has_orange.get(w, False)
+        ):
+            window_shift[w] = -1
+
+    easy_single_run_remap: Dict[int, int] = {}
+    single_run_shift: Dict[int, int] = {}
+
+    if target_diff == "Easy":
+        easy_single_run_remap = _easy_single_note_run_remaps(
+            notes,
+            tpb,
+            cfg["allowed_frets"],
+        )
+
+    if target_diff in ("Easy", "Medium"):
+        single_run_shift = _single_note_run_shifts(
+            notes,
+            tpb,
+            cfg["allowed_frets"],
+        )
 
     out: List[Note] = []
     for i, en in enumerate(notes):
@@ -372,9 +820,15 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
 
         # Aplicar shift pré-computado a este single (só Easy/Medium)
         wshift = window_shift.get(en.tick // win, 0) if target_diff in ("Easy","Medium") else 0
+        run_shift = single_run_shift.get(i, 0)
+        total_shift = wshift + run_shift
         en_shifted = en
-        if wshift != 0 and len(en.frets) == 1:
-            new_f = max(0, min(allowed_max, en.frets[0] + wshift))
+
+        if target_diff == "Easy" and len(en.frets) == 1 and i in easy_single_run_remap:
+            new_f = easy_single_run_remap[i]
+            en_shifted = Note(en.tick, en.end_tick, (new_f,), False, en.forced_hopo, en.is_tap)
+        elif total_shift != 0 and len(en.frets) == 1:
+            new_f = max(0, min(allowed_max, en.frets[0] + total_shift))
             en_shifted = Note(en.tick, en.end_tick, (new_f,), False, en.forced_hopo, en.is_tap)
 
         n_red = reduce_note(en_shifted, target_diff, sub, isolated, in_burst[i], pc_mode, anchor)
@@ -389,6 +843,10 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
 
     if target_diff == "Easy" and out:
         out = _easy_enforce_min_gap_eighth_of_bar(out, tpb, list(expert.time_sigs))
+        out = _easy_snap_to_beat_divisions_of_bar(out, tpb, list(expert.time_sigs))
+
+    if target_diff == "Medium" and out:
+        out = _medium_enforce_min_gap_eighth_of_bar(out, tpb, list(expert.time_sigs))
 
     if target_diff == "Medium" and out:
         out = _medium_rapid_chord_simplify(out, tpb, notes)
