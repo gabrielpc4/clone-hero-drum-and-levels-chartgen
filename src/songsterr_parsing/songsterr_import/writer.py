@@ -288,18 +288,34 @@ def first_drum_tick(part_drums_track: mido.MidiTrack) -> Optional[int]:
     return None
 
 
-def build_output_midi(template_mid: mido.MidiFile, part_drums_track: mido.MidiTrack) -> mido.MidiFile:
+def build_output_midi_with_track_replacements(
+    template_mid: mido.MidiFile,
+    replacement_tracks: Dict[str, mido.MidiTrack],
+) -> mido.MidiFile:
     output_mid = mido.MidiFile(type=template_mid.type, ticks_per_beat=template_mid.ticks_per_beat)
-    replaced_drums = False
+    replaced_track_names = set()
 
     for track in template_mid.tracks:
-        if track_name(track) == "PART DRUMS":
-            output_mid.tracks.append(part_drums_track)
-            replaced_drums = True
-        else:
-            output_mid.tracks.append(track.copy())
+        current_track_name = track_name(track)
 
-    if not replaced_drums:
-        output_mid.tracks.append(part_drums_track)
+        if current_track_name in replacement_tracks:
+            output_mid.tracks.append(replacement_tracks[current_track_name])
+            replaced_track_names.add(current_track_name)
+            continue
+
+        output_mid.tracks.append(track.copy())
+
+    for current_track_name, replacement_track in replacement_tracks.items():
+        if current_track_name in replaced_track_names:
+            continue
+
+        output_mid.tracks.append(replacement_track)
 
     return output_mid
+
+
+def build_output_midi(template_mid: mido.MidiFile, part_drums_track: mido.MidiTrack) -> mido.MidiFile:
+    return build_output_midi_with_track_replacements(
+        template_mid,
+        {"PART DRUMS": part_drums_track},
+    )

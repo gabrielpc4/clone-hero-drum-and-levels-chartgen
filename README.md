@@ -62,11 +62,15 @@ Pipeline principal:
 
 - `src/chart_generation/parse_chart.py`
 - `src/chart_generation/parse_drums.py`
+- `src/chart_generation/parse_vocals.py`
 - `src/songsterr_parsing/import_songsterr.py`
+- `src/songsterr_parsing/import_vocals.py`
 - `src/songsterr_parsing/songsterr_import/context.py`
 - `src/songsterr_parsing/songsterr_import/pipeline.py`
+- `src/songsterr_parsing/songsterr_import/vocal_pipeline.py`
 - `src/songsterr_parsing/songsterr_import/measure_marker_sync.py`
 - `src/songsterr_parsing/songsterr_import/source.py`
+- `src/songsterr_parsing/songsterr_import/vocal_source.py`
 - `src/songsterr_parsing/songsterr_import/mapping.py`
 - `src/songsterr_parsing/songsterr_import/writer.py`
 - `src/songsterr_parsing/songsterr_import/constants.py`
@@ -74,8 +78,9 @@ Pipeline principal:
 Scripts e ferramentas (sync e entrega):
 - `copy_song_to_clone_hero.ps1` (Windows) — copia `notes.generated.mid` para `Songs/.../notes.mid` e copia o resto da origem
 - `src/songsterr_parsing/download_songsterr_midi.py` — baixar MIDI a partir de URL (requer arquivo de cookies de sessão; export via API de usuário autenticado, tipicamente Songsterr Plus)
+- `tools/generate_vocals_midi.py` — atualiza `Songs/.../notes.mid` em-place com `PART VOCALS`, cria backup antes e preserva todo o resto da chart
 - `tools/songsterr_workflow.ps1` — encadear *download* + *import* + *sync* no console (não invoca a aplicação WPF)
-- `tools/SongsterrImport.sln` — UI WPF (`SongsterrImport.Desktop`): escolhe pasta em `Songs/`, login Songsterr no WebView2, grava cookies, lança os mesmos `py` e `copy_song_to_clone_hero.ps1` com log
+- `tools/SongsterrImport.sln` — UI WPF (`SongsterrImport.Desktop`): escolhe pasta em `Songs/`, login Songsterr no WebView2, grava cookies, lança os mesmos `py` e `copy_song_to_clone_hero.ps1` com log; também tem ações por música para `Generate Difficulties` e `Generate Vocals`
   - Na **raiz do repo**: `Iniciar-Songsterr-Import.bat` (duplo clique: compila e abre; precisa de .NET 8 SDK) e `Criar-Atalho-No-Desktop.bat` (cria `Songsterr Import.lnk` na área de trabalho apontando para o `exe` em `bin\Debug\net8.0-windows\`)
 
 `requirements.txt` na raiz: `mido`, `requests`. Variável de ambiente de trabalho: `PYTHONPATH=src;src/chart_generation` (Windows usa `;` no caminho).
@@ -85,6 +90,7 @@ Redução e geração de dificuldades:
 - `src/difficulty_generation/reducer.py`
 - `src/difficulty_generation/reducer_drums.py`
 - `src/chart_generation/midi_writer.py`
+- `tools/difficulty_classification/classification_logic.py`
 
 Análises e debug:
 
@@ -144,6 +150,45 @@ py -3 src/songsterr_parsing/download_songsterr_midi.py "https://www.songsterr.co
 ```
 
 A sequencia de terminal documentada (sem abrir a GUI) esta em `tools/songsterr_workflow.ps1`.
+
+### 4.2 Gerar `PART VOCALS`
+
+Uso básico para gerar um `notes.generated.mid` ou qualquer outro output a partir
+de um MIDI auxiliar com track vocal nomeada:
+
+```bash
+python3 src/songsterr_parsing/import_vocals.py "<externo.mid>" "<out.mid>" \
+  --ref-path "<notes.chart|notes.mid>"
+```
+
+Escopo atual:
+
+- gera apenas **lead vocals**
+- gera só **pitch + phrase markers**
+- **não** gera lyrics
+- **não** gera `HARM1` / `HARM2`
+- usa o mesmo sync por `MEASURE_n` do pipeline de bateria
+
+Regras importantes:
+
+- a track source precisa ter nome com `vocal` ou `lyrics`
+- a track source precisa ter notas no range vocal esperado (`36..84`)
+- se não houver track vocal válida, o processo falha com erro explícito
+- o merge substitui só `PART VOCALS`; o resto da chart é preservado
+
+Para atualizar diretamente a cópia já publicada em `Songs/.../notes.mid`:
+
+```powershell
+py -3 tools/generate_vocals_midi.py "C:\...\Songs\System of a Down - Pictures (Wagsii)\notes.mid" "C:\...\original\custom\System of a Down - Pictures (Wagsii)\System of a Down-Pictures-12-21-2025.mid" --custom-song-dir "C:\...\original\custom\System of a Down - Pictures (Wagsii)"
+```
+
+Comportamento do script acima:
+
+- cria backup timestamped de `notes.mid`
+- reescreve só `PART VOCALS`
+- preserva guitarra, bateria, conductor, events e outras tracks
+- tenta atualizar `diff_vocals` no `song.ini` da source e no `song.ini` de `Songs/`
+- se não conseguir classificar `diff_vocals`, avisa no log e não mexe nesse campo
 
 ## 5. Modelo de sync em produção
 
@@ -503,6 +548,9 @@ e:
 
 A música mais recente usada como baseline de trabalho foi `Question!`.
 
+Exceção prática: a ação de vocals que escreve direto em `Songs/.../notes.mid`
+não exige sync depois, porque ela já atua no arquivo final publicado para o jogo.
+
 ### 14.3 `copy_song_to_clone_hero.ps1`
 
 O script **exige dois argumentos**: pasta de **origem** (ex.:
@@ -538,6 +586,29 @@ Renomeia `Songs\Nome Curto` para `Songs\Nome Curto (Wagsii)` (exemplo) quando
 há correspondência unívoca. Se duas pastas de custom compartilharem o mesmo
 nome após retirar o sufixo, o script avisa e não mexe em nada.
 
+### 14.5 Workflow de vocals
+
+Hoje existem dois caminhos suportados:
+
+1. **CLI para gerar arquivo novo**:
+   - `src/songsterr_parsing/import_vocals.py`
+   - uso típico: gerar `notes.generated.mid` na pasta source
+   - depois, se esse for o artefato final desejado, roda o sync normal
+
+2. **UI / script para atualizar o arquivo final do jogo**:
+   - botão `Generate Vocals` na app WPF
+   - ou `tools/generate_vocals_midi.py`
+   - uso típico: já existe `Songs/<musica>/notes.mid` e queremos adicionar só vocals
+
+No caminho 2:
+
+- o target é sempre o `notes.mid` já existente em `Songs/`
+- o script cria backup antes de sobrescrever
+- só `PART VOCALS` é substituída/adicionada
+- o resto da chart fica intacto
+- `song.ini` recebe `diff_vocals` quando a classificação encontra score
+- não existe fallback silencioso para lyrics: se o source não tiver lyrics, v1 fica pitch-only mesmo
+
 ## 16. Regras de continuidade para a próxima LLM
 
 1. Leia este arquivo primeiro.
@@ -553,4 +624,5 @@ nome após retirar o sufixo, o script avisa e não mexe em nada.
    - sem referência
    - sem `MEASURE_n`
    - sem track de bateria válida
+   - sem track vocal válida
 7. Atualize este arquivo, não espalhe uma nova "fonte da verdade" em outro `.md`.

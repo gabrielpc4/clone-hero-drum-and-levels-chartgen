@@ -409,6 +409,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button x:Name="GenerateDrumChartButton" Grid.Column="0" Content="Generate Drum Chart" IsEnabled="True" Click="OnGenerateDrumChartClick" Padding="8,4" MinWidth="150" />
                     <Button x:Name="GenerateDifficultiesButton" Grid.Column="1" Content="Generate Difficulties" Margin="8,0,0,0" IsEnabled="True" Click="OnGenerateDifficultiesClick" Padding="8,4" MinWidth="150">
@@ -416,7 +417,12 @@
                             <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Recomputes Easy, Medium, and Hard for PART GUITAR and PART DRUMS from the Expert chart in Songs/&lt;track&gt;/notes.mid. Backs up the file first, then overwrites."/>
                         </Button.ToolTip>
                     </Button>
-                    <Button Grid.Column="2" Margin="8,0,0,0" Content="Open Cymbal Tool" Click="OnOpenCymbalToolClick" Padding="8,4" MinWidth="140" />
+                    <Button x:Name="GenerateVocalsButton" Grid.Column="2" Content="Generate Vocals" Margin="8,0,0,0" IsEnabled="True" Click="OnGenerateVocalsClick" Padding="8,4" MinWidth="150">
+                        <Button.ToolTip>
+                            <TextBlock TextWrapping="Wrap" MaxWidth="420" Text="Generates a lead-only PART VOCALS in Songs/&lt;track&gt;/notes.mid from the latest dated source MIDI in the custom song folder. Creates a timestamped backup first and preserves the existing non-vocal content."/>
+                        </Button.ToolTip>
+                    </Button>
+                    <Button Grid.Column="3" Margin="8,0,0,0" Content="Open Cymbal Tool" Click="OnOpenCymbalToolClick" Padding="8,4" MinWidth="140" />
                 </Grid>
                 <Button
                     x:Name="GenerateAllDifficultiesInSongsButton"
