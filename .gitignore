@@ -42,6 +42,13 @@ venv/
 
 # Songsterr GP→MIDI (npm / alphatab)
 src/songsterr_parsing/node_modules/
+src/songsterr_parsing/_t.gp
+src/songsterr_parsing/_t.mid
+
+# Desktop tool artifacts
+tools/SongsterrImport.Desktop/node_modules/
+tools/SongsterrImport.Desktop/bin/
+tools/SongsterrImport.Desktop/obj/
 
 # Editores
 .cursor/
