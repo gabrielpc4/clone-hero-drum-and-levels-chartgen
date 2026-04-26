@@ -164,13 +164,12 @@ internal static class CymbalAlternationService
         }
 
         string nameWithout = Path.GetFileNameWithoutExtension(sourceMidiPath);
-        string ext = Path.GetExtension(sourceMidiPath);
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd-HH-mm", CultureInfo.InvariantCulture);
-        string fileName = nameWithout + "." + timestamp + ".backup" + ext;
+        string fileName = nameWithout + "." + timestamp + ".backup";
         string destPath = Path.Combine(directory, fileName);
         if (File.Exists(destPath))
         {
-            fileName = nameWithout + "." + timestamp + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".backup" + ext;
+            fileName = nameWithout + "." + timestamp + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".backup";
             destPath = Path.Combine(directory, fileName);
         }
 

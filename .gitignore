@@ -59,3 +59,6 @@ tools/SongsterrImport.Desktop/obj/
 
 # Backup do parser/análise (geralmente intermediário, regenerável)
 src/__pycache__/
+
+# Cópias de segurança de MIDI (extensão sem .mid — conteúdo ainda é MIDI)
+*.backup
