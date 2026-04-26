@@ -610,10 +610,14 @@ public partial class MainWindow : Window
         if (_isBusy)
         {
             GenerateDrumChartButton.IsEnabled = false;
+            GenerateDifficultiesButton.IsEnabled = false;
+            GenerateAllDifficultiesInSongsButton.IsEnabled = false;
             return;
         }
 
         GenerateDrumChartButton.IsEnabled = true;
+        GenerateDifficultiesButton.IsEnabled = true;
+        GenerateAllDifficultiesInSongsButton.IsEnabled = true;
     }
 
     private void SetBusy(bool active)
@@ -625,6 +629,16 @@ public partial class MainWindow : Window
     private void OnGenerateDrumChartClick(object sender, RoutedEventArgs e)
     {
         _ = RunGenerateDrumChartAsync();
+    }
+
+    private void OnGenerateDifficultiesClick(object sender, RoutedEventArgs e)
+    {
+        _ = RunGenerateDifficultiesAsync();
+    }
+
+    private void OnGenerateAllDifficultiesInSongsClick(object sender, RoutedEventArgs e)
+    {
+        _ = RunGenerateAllDifficultiesInSongsAsync();
     }
 
     private void OnOpenCymbalToolClick(object sender, RoutedEventArgs e)
@@ -643,9 +657,21 @@ public partial class MainWindow : Window
 
     private string ImportScript => Path.Combine(RepoRoot, "src", "songsterr_parsing", "import_songsterr.py");
     private string SyncScript => Path.Combine(RepoRoot, "copy_song_to_clone_hero.ps1");
+    private string GenerateDifficultiesScript => Path.Combine(RepoRoot, "tools", "generate_difficulties_midi.py");
 
     private IReadOnlyDictionary<string, string> BuildPythonEnv() =>
-        new Dictionary<string, string> { { "PYTHONPATH", Path.Combine(RepoRoot, "src") + ";" + Path.Combine(RepoRoot, "src", "chart_generation") } };
+        new Dictionary<string, string>
+        {
+            {
+                "PYTHONPATH",
+                string.Join(";", new[]
+                {
+                    Path.Combine(RepoRoot, "src"),
+                    Path.Combine(RepoRoot, "src", "chart_generation"),
+                    Path.Combine(RepoRoot, "src", "difficulty_generation")
+                })
+            }
+        };
 
     private string RepoPathForResolve => _repositoryRootDisplay;
 
@@ -803,6 +829,158 @@ public partial class MainWindow : Window
             else
             {
                 LogProgress.Report(">> Generate Drum Chart stopped: sync failed (exit " + code + ").");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogProgress.Report("ERROR: " + ex);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task RunGenerateDifficultiesAsync()
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        if (!File.Exists(GenerateDifficultiesScript))
+        {
+            string scriptDisplay = RepositoryPaths.ToPathBelowRepository(GenerateDifficultiesScript, RepoPathForResolve);
+            System.Windows.MessageBox.Show("Script not found: " + scriptDisplay, "Generate Difficulties", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_syncSongsSubfolderName))
+        {
+            System.Windows.MessageBox.Show(
+                "Select a track in the list so the target folder under Songs/ is known.",
+                "Generate Difficulties",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
+            return;
+        }
+
+        string? notesFullPath = TryResolveSongsDestNotesMidFullPath();
+        if (string.IsNullOrEmpty(notesFullPath) || !File.Exists(notesFullPath))
+        {
+            string display = notesFullPath is { Length: > 0 } p
+                ? p
+                : Path.Combine(RepoRoot, "Songs", _syncSongsSubfolderName.Trim(), "notes.mid");
+            System.Windows.MessageBox.Show(
+                "Could not find notes.mid in the Clone Hero song folder. Run import + sync first, or add the file yourself.\n\n"
+                + "Expected path:\n" + display,
+                "Generate Difficulties",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
+            return;
+        }
+
+        SetBusy(true);
+        try
+        {
+            var args = new List<string> { GenerateDifficultiesScript, notesFullPath };
+            int code = await ProcessRunner.RunWithLogAsync(
+                Py,
+                args,
+                RepoRoot,
+                BuildPythonEnv(),
+                LogProgress,
+                _cts.Token
+            );
+            if (code == 0)
+            {
+                LogProgress.Report(">> Generate Difficulties completed successfully.");
+                LoadSongs();
+            }
+            else
+            {
+                LogProgress.Report(">> Generate Difficulties failed (exit " + code + ").");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogProgress.Report("ERROR: " + ex);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private string? TryResolveSongsDestNotesMidFullPath()
+    {
+        if (string.IsNullOrWhiteSpace(_syncSongsSubfolderName))
+        {
+            return null;
+        }
+
+        string fullPath = Path.GetFullPath(
+            Path.Combine(RepoRoot, "Songs", _syncSongsSubfolderName.Trim(), "notes.mid")
+        );
+        return fullPath;
+    }
+
+    private async Task RunGenerateAllDifficultiesInSongsAsync()
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        if (!File.Exists(GenerateDifficultiesScript))
+        {
+            string scriptDisplay = RepositoryPaths.ToPathBelowRepository(GenerateDifficultiesScript, RepoPathForResolve);
+            System.Windows.MessageBox.Show("Script not found: " + scriptDisplay, "Generate all difficulties", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        string songsDir = Path.GetFullPath(Path.Combine(RepoRoot, "Songs"));
+        if (!Directory.Exists(songsDir))
+        {
+            System.Windows.MessageBox.Show("Songs folder not found:\n" + songsDir, "Generate all difficulties", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        bool confirmed = System.Windows.MessageBox.Show(
+            "This will run difficulty generation for every subfolder in Songs/ that has notes.mid, " +
+            "skipping Harmonix (official) charts. Each file gets a backup before overwrite.\n\n" +
+            "Songs root:\n" + songsDir + "\n\nContinue?",
+            "Generate all difficulties (Songs/)",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question
+        ) == MessageBoxResult.OK;
+        if (!confirmed)
+        {
+            return;
+        }
+
+        SetBusy(true);
+        try
+        {
+            var args = new List<string> { GenerateDifficultiesScript, "--scan-songs" };
+            int code = await ProcessRunner.RunWithLogAsync(
+                Py,
+                args,
+                RepoRoot,
+                BuildPythonEnv(),
+                LogProgress,
+                _cts.Token
+            );
+            if (code == 0)
+            {
+                LogProgress.Report(">> Generate all difficulties (Songs/) completed successfully.");
+                LoadSongs();
+            }
+            else
+            {
+                LogProgress.Report(">> Generate all difficulties (Songs/) finished with errors (exit " + code + ").");
             }
         }
         catch (Exception ex)

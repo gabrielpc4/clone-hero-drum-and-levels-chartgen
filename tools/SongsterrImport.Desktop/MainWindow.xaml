@@ -408,10 +408,28 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button x:Name="GenerateDrumChartButton" Grid.Column="0" Content="Generate Drum Chart" IsEnabled="True" Click="OnGenerateDrumChartClick" Padding="8,4" MinWidth="150" />
-                    <Button Grid.Column="1" Margin="8,0,0,0" Content="Open Cymbal Tool" Click="OnOpenCymbalToolClick" Padding="8,4" MinWidth="140" />
+                    <Button x:Name="GenerateDifficultiesButton" Grid.Column="1" Content="Generate Difficulties" Margin="8,0,0,0" IsEnabled="True" Click="OnGenerateDifficultiesClick" Padding="8,4" MinWidth="150">
+                        <Button.ToolTip>
+                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Recomputes Easy, Medium, and Hard for PART GUITAR and PART DRUMS from the Expert chart in Songs/&lt;track&gt;/notes.mid. Backs up the file first, then overwrites."/>
+                        </Button.ToolTip>
+                    </Button>
+                    <Button Grid.Column="2" Margin="8,0,0,0" Content="Open Cymbal Tool" Click="OnOpenCymbalToolClick" Padding="8,4" MinWidth="140" />
                 </Grid>
+                <Button
+                    x:Name="GenerateAllDifficultiesInSongsButton"
+                    Margin="0,8,0,0"
+                    Padding="8,4"
+                    HorizontalAlignment="Left"
+                    MinWidth="220"
+                    Content="Generate all difficulties (Songs/…)"
+                    Click="OnGenerateAllDifficultiesInSongsClick">
+                    <Button.ToolTip>
+                        <TextBlock TextWrapping="Wrap" MaxWidth="450" Text="Walks every subfolder under the repository Songs/ directory. For each track that has notes.mid and is not a Harmonix (official) chart, regenerates E/M/H and creates a timestamped backup. Skips folders named … (Harmonix) and songs with charter=Harmonix in song.ini."/>
+                    </Button.ToolTip>
+                </Button>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Top">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
                         <CheckBox x:Name="IncludeSoftNotesCheck" Content="Include soft notes" IsChecked="True" VerticalAlignment="Center" />
