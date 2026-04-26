@@ -407,8 +407,10 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button x:Name="GenerateDrumChartButton" Grid.Column="0" Content="Generate Drum Chart" IsEnabled="True" Click="OnGenerateDrumChartClick" Padding="8,4" MinWidth="150" />
+                    <Button Grid.Column="1" Margin="8,0,0,0" Content="Open Cymbal Tool" Click="OnOpenCymbalToolClick" Padding="8,4" MinWidth="140" />
                 </Grid>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Top">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">

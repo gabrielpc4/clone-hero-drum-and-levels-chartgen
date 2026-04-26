@@ -1,0 +1,80 @@
+<Window x:Class="SongsterrImport.Desktop.CymbalAlternationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cymbal Alternation Tool"
+        Height="500"
+        Width="760"
+        MinHeight="440"
+        MinWidth="680"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="190"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="MIDI file" />
+            <TextBox x:Name="MidiPathTextBox" Grid.Column="1" VerticalContentAlignment="Center" />
+            <Button Grid.Column="2" Margin="8,0,0,0" Padding="10,4" Content="Browse..." Click="OnBrowseMidiClick" />
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="Cymbal" />
+            <ComboBox x:Name="CymbalComboBox" Grid.Column="1" />
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="Start tick" />
+            <TextBox x:Name="StartTickTextBox" Grid.Column="1" VerticalContentAlignment="Center" />
+            <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="16,0,8,0" Text="End tick" />
+            <TextBox x:Name="EndTickTextBox" Grid.Column="3" VerticalContentAlignment="Center" />
+            <Button Grid.Column="4" Margin="12,0,0,0" Width="32" Height="28" Content="+" Click="OnAddIntervalClick" />
+            <Button Grid.Column="5" Margin="8,0,0,0" Width="32" Height="28" Content="-" Click="OnRemoveIntervalClick" />
+        </Grid>
+
+        <GroupBox Grid.Row="3" Header="Intervals">
+            <ListBox x:Name="IntervalsListBox" Margin="8" />
+        </GroupBox>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,10,0,10">
+            <Button x:Name="ExecuteButton" Content="Apply Alternation" Padding="12,5" Click="OnApplyAlternationClick" />
+            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Foreground="DimGray" Text="This updates the selected MIDI file in place. It alternates notes across all listed intervals." />
+        </StackPanel>
+
+        <GroupBox Grid.Row="5" Header="Result">
+            <TextBox x:Name="ResultTextBox"
+                     Margin="8"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     FontFamily="Consolas"
+                     FontSize="11" />
+        </GroupBox>
+    </Grid>
+</Window>
