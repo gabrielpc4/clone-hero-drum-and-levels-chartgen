@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -49,6 +51,10 @@ public partial class MainWindow : Window
     private const string DefaultInitialOffsetTicks = "768";
     private const string DefaultFlamAssumptionBeats = "0.0625";
     private const string DefaultReferenceChartPath = "";
+    private static readonly Regex SongsterrManualMidiPattern = new(
+        @"^.*(?<month>\d{2})-(?<day>\d{2})-(?<year>\d{4})\.mid$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
     // This machine: `python` on PATH (3.13); `py` not installed.
     private const string DefaultPythonLauncher = "python";
 
@@ -84,9 +90,7 @@ public partial class MainWindow : Window
         });
         string guess = DefaultRepoRootGuess();
         _repositoryRootDisplay = RepositoryPaths.ToDisplayWithEnvironmentPrefix(guess);
-        UrlText.Text = AppServices.ReadLastUrl();
         Closing += OnMainWindowClosing;
-        UrlText.LostFocus += OnUrlTextLostFocus;
         IncludeSoftNotesCheck.IsChecked = AppServices.ReadIncludeSoftNotesEnabled(defaultValue: true);
         ConvertFlamsToDoubleCheck.IsChecked = AppServices.ReadConvertFlamsToDoubleEnabled(defaultValue: false);
         IncludeSoftNotesCheck.Checked += OnImportOptionsCheckChanged;
@@ -95,7 +99,6 @@ public partial class MainWindow : Window
         ConvertFlamsToDoubleCheck.Unchecked += OnImportOptionsCheckChanged;
         SongsListView.ItemsSource = _songSource;
         ApplySongFilter();
-        UpdateSessionUi();
         LoadSongs();
         UpdateGenerateButtonEnabledState();
     }
@@ -120,14 +123,8 @@ public partial class MainWindow : Window
 
     private void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
-        AppServices.WriteLastUrl(UrlText.Text.Trim());
         PersistImportOptions();
         PersistLastSelectedTrack();
-    }
-
-    private void OnUrlTextLostFocus(object sender, RoutedEventArgs e)
-    {
-        AppServices.WriteLastUrl(UrlText.Text.Trim());
     }
 
     private void OnImportOptionsCheckChanged(object sender, RoutedEventArgs e)
@@ -297,9 +294,8 @@ public partial class MainWindow : Window
             string name = entry.DisplayName;
             string customDir = entry.FullPath;
             string repoText = _repositoryRootDisplay;
-            string downloadFile = Path.Combine(customDir, "songsterr_in.mid");
             string outFile = Path.Combine(customDir, "notes.generated.mid");
-            _pathDownloadedSongsterrMidBelowRepo = RepositoryPaths.ToPathBelowRepository(downloadFile, repoText);
+            _pathDownloadedSongsterrMidBelowRepo = string.Empty;
             _pathImportOutputSongsterrMidBelowRepo = RepositoryPaths.ToPathBelowRepository(outFile, repoText);
             _pathSyncSourceFolderBelowRepo = RepositoryPaths.ToPathBelowRepository(customDir, repoText);
             _syncSongsSubfolderName = name;
@@ -607,48 +603,6 @@ public partial class MainWindow : Window
         UpdateSortColumnHeaderIndicators();
     }
 
-    private void UpdateSessionUi()
-    {
-        string cookieFilePath = AppServices.CookieFilePath;
-        bool hasSession = File.Exists(cookieFilePath);
-        if (hasSession)
-        {
-            SessionStatusText.Text = "Logged in";
-            SessionActionButton.Content = "Logout";
-        }
-        else
-        {
-            SessionStatusText.Text = "Not signed in";
-            SessionActionButton.Content = "Login";
-        }
-    }
-
-    private void OnSessionActionClick(object sender, RoutedEventArgs e)
-    {
-        string cookieFilePath = AppServices.CookieFilePath;
-        if (File.Exists(cookieFilePath))
-        {
-            try
-            {
-                File.Delete(cookieFilePath);
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show("Could not remove the saved session: " + ex.Message, "Logout", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            UpdateSessionUi();
-        }
-
-        var w = new LoginWindow { Owner = this };
-        bool? result = w.ShowDialog();
-        if (result is true)
-        {
-            UpdateSessionUi();
-        }
-    }
-
     private IProgress<string> LogProgress => _log;
 
     private void UpdateGenerateButtonEnabledState()
@@ -659,21 +613,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        string resolvedMid = RepositoryPaths.ResolveToFullPath(_pathDownloadedSongsterrMidBelowRepo, RepositoryPathForDisplay);
-        bool hasSongsterrMidi = resolvedMid.Length > 0 && File.Exists(resolvedMid);
-        GenerateDrumChartButton.IsEnabled = hasSongsterrMidi;
+        GenerateDrumChartButton.IsEnabled = true;
     }
 
     private void SetBusy(bool active)
     {
         _isBusy = active;
-        DownloadButton.IsEnabled = !active;
         UpdateGenerateButtonEnabledState();
-    }
-
-    private void OnDownloadClick(object sender, RoutedEventArgs e)
-    {
-        _ = RunDownloadOnlyAsync();
     }
 
     private void OnGenerateDrumChartClick(object sender, RoutedEventArgs e)
@@ -683,11 +629,9 @@ public partial class MainWindow : Window
 
     private string RepoRoot => RepositoryPaths.ExpandDisplayPath(_repositoryRootDisplay);
     private string Py => DefaultPythonLauncher;
-    private string CookiePath => AppServices.CookieFilePath;
 
     private string RepositoryPathForDisplay => _repositoryRootDisplay;
 
-    private string DownloadScript => Path.Combine(RepoRoot, "src", "songsterr_parsing", "download_songsterr_midi.py");
     private string ImportScript => Path.Combine(RepoRoot, "src", "songsterr_parsing", "import_songsterr.py");
     private string SyncScript => Path.Combine(RepoRoot, "copy_song_to_clone_hero.ps1");
 
@@ -695,68 +639,6 @@ public partial class MainWindow : Window
         new Dictionary<string, string> { { "PYTHONPATH", Path.Combine(RepoRoot, "src") + ";" + Path.Combine(RepoRoot, "src", "chart_generation") } };
 
     private string RepoPathForResolve => _repositoryRootDisplay;
-
-    private async Task RunDownloadOnlyAsync()
-    {
-        if (_isBusy)
-        {
-            return;
-        }
-
-        SetBusy(true);
-        try
-        {
-            int code = await DoDownloadAsync();
-            if (code >= 0)
-            {
-                LogProgress.Report(code == 0 ? ">> Download finished successfully" : ">> Download exit code: " + code);
-            }
-        }
-        catch (Exception ex)
-        {
-            LogProgress.Report("ERROR: " + ex);
-        }
-        finally
-        {
-            SetBusy(false);
-        }
-    }
-
-    /// <returns>Process exit code, or -1 if validation failed (user was already notified).</returns>
-    private async Task<int> DoDownloadAsync()
-    {
-        if (!File.Exists(CookiePath))
-        {
-            string cookieSh = RepositoryPaths.ToDisplayWithEnvironmentPrefix(CookiePath);
-            System.Windows.MessageBox.Show("Sign in and save the session first. Missing cookie file: " + cookieSh, "Download", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return -1;
-        }
-
-        if (!File.Exists(DownloadScript))
-        {
-            string scriptDisplay = RepositoryPaths.ToPathBelowRepository(DownloadScript, RepoPathForResolve);
-            System.Windows.MessageBox.Show("Script not found: " + scriptDisplay, "Download", MessageBoxButton.OK, MessageBoxImage.Error);
-            return -1;
-        }
-
-        string url = UrlText.Text.Trim();
-        AppServices.WriteLastUrl(url);
-        string outMid = RepositoryPaths.ResolveToFullPath(_pathDownloadedSongsterrMidBelowRepo, RepoPathForResolve);
-        if (url.Length == 0 || outMid.Length == 0)
-        {
-            System.Windows.MessageBox.Show("Fill in the URL and select a source track (paths for the downloaded MIDI are set from the selection).", "Download", MessageBoxButton.OK, MessageBoxImage.Information);
-            return -1;
-        }
-
-        string? parent = Path.GetDirectoryName(outMid);
-        if (parent is not null)
-        {
-            Directory.CreateDirectory(parent);
-        }
-
-        var argList = new List<string> { DownloadScript, url, outMid, "--cookie-file", CookiePath };
-        return await ProcessRunner.RunWithLogAsync(Py, argList, RepoRoot, BuildPythonEnv(), LogProgress, _cts.Token);
-    }
 
     /// <returns>Process exit code, or -1 if validation failed (user was already notified).</returns>
     private async Task<int> DoImportAsync()
@@ -768,11 +650,16 @@ public partial class MainWindow : Window
             return -1;
         }
 
-        string inputMid = RepositoryPaths.ResolveToFullPath(_pathDownloadedSongsterrMidBelowRepo, RepoPathForResolve);
+        string inputMid = ResolveDetectedSongsterrInputMidiPath();
         string outMid = RepositoryPaths.ResolveToFullPath(_pathImportOutputSongsterrMidBelowRepo, RepoPathForResolve);
         if (inputMid.Length == 0 || outMid.Length == 0)
         {
-            System.Windows.MessageBox.Show("Select a source track in the list so the import paths are set.", "Import", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(
+                "Selecione uma musica e garanta que existe um MIDI do Songsterr na pasta de origem terminando com MM-DD-YYYY.mid.",
+                "Import",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
             return -1;
         }
 
@@ -780,13 +667,6 @@ public partial class MainWindow : Window
         if (parent is not null)
         {
             Directory.CreateDirectory(parent);
-        }
-
-        if (!File.Exists(inputMid))
-        {
-            string msgPath = RepositoryPaths.ToPathBelowRepository(inputMid, RepoPathForResolve);
-            System.Windows.MessageBox.Show("No input MIDI file yet: " + msgPath, "Import", MessageBoxButton.OK, MessageBoxImage.Information);
-            return -1;
         }
 
         var list = new List<string> { ImportScript, inputMid, outMid, "--initial-offset-ticks", DefaultInitialOffsetTicks };
@@ -863,10 +743,25 @@ public partial class MainWindow : Window
             return;
         }
 
-        string songsterrMid = RepositoryPaths.ResolveToFullPath(_pathDownloadedSongsterrMidBelowRepo, RepoPathForResolve);
-        if (string.IsNullOrEmpty(songsterrMid) || !File.Exists(songsterrMid))
+        string songsterrMid = ResolveDetectedSongsterrInputMidiPath();
+        if (string.IsNullOrEmpty(songsterrMid))
         {
-            System.Windows.MessageBox.Show("Download the Songsterr MIDI for the selected track first (songsterr_in.mid).", "Generate Drum Chart", MessageBoxButton.OK, MessageBoxImage.Information);
+            string sourceFolderPath = RepositoryPaths.ResolveToFullPath(_pathSyncSourceFolderBelowRepo, RepoPathForResolve);
+            string folderText = sourceFolderPath.Length == 0
+                ? "(nenhuma pasta selecionada)"
+                : RepositoryPaths.ToPathBelowRepository(sourceFolderPath, RepoPathForResolve);
+
+            System.Windows.MessageBox.Show(
+                "Nao encontrei MIDI manual do Songsterr na pasta da musica.\n\n"
+                + "Padrao esperado: terminar com MM-DD-YYYY.mid\n"
+                + "Exemplos:\n"
+                + "- Pictures-12-21-2025.mid\n"
+                + "- System of a Down-Radio_Video-04-24-2026.mid\n\n"
+                + "Pasta atual: " + folderText,
+                "Generate Drum Chart",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
             return;
         }
 
@@ -916,5 +811,105 @@ public partial class MainWindow : Window
         _cts.Cancel();
         _cts.Dispose();
         base.OnClosing(e);
+    }
+
+    private string ResolveDetectedSongsterrInputMidiPath()
+    {
+        string sourceFolderPath = RepositoryPaths.ResolveToFullPath(_pathSyncSourceFolderBelowRepo, RepoPathForResolve);
+        if (sourceFolderPath.Length == 0 || !Directory.Exists(sourceFolderPath))
+        {
+            _pathDownloadedSongsterrMidBelowRepo = string.Empty;
+            return string.Empty;
+        }
+
+        string detectedMidiPath = FindLatestSongsterrManualMidiPath(sourceFolderPath);
+        if (detectedMidiPath.Length == 0)
+        {
+            _pathDownloadedSongsterrMidBelowRepo = string.Empty;
+            return string.Empty;
+        }
+
+        _pathDownloadedSongsterrMidBelowRepo = RepositoryPaths.ToPathBelowRepository(detectedMidiPath, RepoPathForResolve);
+        return detectedMidiPath;
+    }
+
+    private static string FindLatestSongsterrManualMidiPath(string sourceFolderPath)
+    {
+        if (!Directory.Exists(sourceFolderPath))
+        {
+            return string.Empty;
+        }
+
+        string selectedMidiPath = string.Empty;
+        DateTime selectedRevisionDate = DateTime.MinValue;
+        DateTime selectedWriteTimeUtc = DateTime.MinValue;
+        string selectedFileName = string.Empty;
+
+        foreach (string filePath in Directory.EnumerateFiles(sourceFolderPath, "*.mid", SearchOption.TopDirectoryOnly))
+        {
+            string fileName = Path.GetFileName(filePath);
+            if (!TryParseSongsterrRevisionDate(fileName, out DateTime revisionDate))
+            {
+                continue;
+            }
+
+            DateTime writeTimeUtc = File.GetLastWriteTimeUtc(filePath);
+            bool shouldReplaceSelection = false;
+            if (revisionDate > selectedRevisionDate)
+            {
+                shouldReplaceSelection = true;
+            }
+            else if (revisionDate == selectedRevisionDate)
+            {
+                if (writeTimeUtc > selectedWriteTimeUtc)
+                {
+                    shouldReplaceSelection = true;
+                }
+                else if (writeTimeUtc == selectedWriteTimeUtc)
+                {
+                    if (string.Compare(fileName, selectedFileName, StringComparison.OrdinalIgnoreCase) > 0)
+                    {
+                        shouldReplaceSelection = true;
+                    }
+                }
+            }
+
+            if (shouldReplaceSelection)
+            {
+                selectedMidiPath = filePath;
+                selectedRevisionDate = revisionDate;
+                selectedWriteTimeUtc = writeTimeUtc;
+                selectedFileName = fileName;
+            }
+        }
+
+        return selectedMidiPath;
+    }
+
+    private static bool TryParseSongsterrRevisionDate(string fileName, out DateTime revisionDate)
+    {
+        revisionDate = DateTime.MinValue;
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return false;
+        }
+
+        Match match = SongsterrManualMidiPattern.Match(fileName);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        string month = match.Groups["month"].Value;
+        string day = match.Groups["day"].Value;
+        string year = match.Groups["year"].Value;
+        string dateText = year + "-" + month + "-" + day;
+        return DateTime.TryParseExact(
+            dateText,
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out revisionDate
+        );
     }
 }

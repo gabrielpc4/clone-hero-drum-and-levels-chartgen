@@ -8,20 +8,12 @@
         MinWidth="680">
     <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="220"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <GroupBox Grid.Row="0" Header="Songsterr session" Padding="6" Margin="0,0,0,8">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock x:Name="SessionStatusText" Text="Not signed in" VerticalAlignment="Center" MinWidth="120" />
-                <Button x:Name="SessionActionButton" Content="Login" MinWidth="88" Margin="8,0,0,0" Padding="8,4" Click="OnSessionActionClick" />
-            </StackPanel>
-        </GroupBox>
-
-        <GroupBox Grid.Row="1" Header="Source tracks" Padding="6" Margin="0,0,0,8">
+        <GroupBox Grid.Row="0" Header="Source tracks" Padding="6" Margin="0,0,0,8">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -398,7 +390,7 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Top" HorizontalAlignment="Left">
                     <Button Content="Open source folder" Click="OnOpenSyncSourceFolderClick" Padding="6,2" FontSize="11" MinHeight="24">
                         <Button.ToolTip>
-                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Opens the custom source folder for the selected track (reference chart, songsterr_in.mid, notes.generated.mid)."/>
+                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Opens the custom source folder for the selected track (reference chart, Songsterr manual MIDI with date in the file name, notes.generated.mid)."/>
                         </Button.ToolTip>
                     </Button>
                     <Button Content="Open dest folder" Margin="8,0,0,0" Click="OnOpenSongsDestFolderClick" Padding="6,2" FontSize="11" MinHeight="24">
@@ -410,30 +402,20 @@
             </Grid>
         </GroupBox>
 
-        <GroupBox Grid.Row="2" Header="Process Song" Padding="6" Margin="0,0,0,8">
+        <GroupBox Grid.Row="1" Header="Process Song" Padding="6" Margin="0,0,0,8">
             <StackPanel>
-    <Grid>
+                <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="URL" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <TextBox x:Name="UrlText"
-                             Grid.Column="1"
-                             Margin="0,0,8,0"
-                             MinHeight="22"
-                             MaxHeight="26"
-                             Height="26"
-                             TextWrapping="NoWrap"
-                             MaxLines="1"
-                             AcceptsReturn="False"
-                             VerticalContentAlignment="Center"
-                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                             ScrollViewer.HorizontalScrollBarVisibility="Hidden" />
-                    <Button x:Name="DownloadButton" Content="Download MIDI" Grid.Column="2" Click="OnDownloadClick" Padding="8,4" MinWidth="120" Margin="0,0,8,0" />
-                    <Button x:Name="GenerateDrumChartButton" Grid.Column="3" Content="Generate Drum Chart" IsEnabled="False" Click="OnGenerateDrumChartClick" Padding="8,4" MinWidth="150" />
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Foreground="DimGray"
+                        Margin="0,0,8,0"
+                        Text="Put the downloaded Songsterr MIDI in the song folder using any file name that ends with MM-DD-YYYY.mid (example: System of a Down-Radio_Video-04-24-2026.mid)." />
+                    <Button x:Name="GenerateDrumChartButton" Grid.Column="1" Content="Generate Drum Chart" IsEnabled="True" Click="OnGenerateDrumChartClick" Padding="8,4" MinWidth="150" />
                 </Grid>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Top">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
@@ -492,7 +474,7 @@
             </StackPanel>
         </GroupBox>
 
-        <GroupBox Grid.Row="3" Header="Log" Padding="6" VerticalAlignment="Stretch">
+        <GroupBox Grid.Row="2" Header="Log" Padding="6" VerticalAlignment="Stretch">
             <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                 <TextBox x:Name="LogText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Disabled" FontFamily="Consolas" FontSize="11" BorderThickness="0" />
             </ScrollViewer>
