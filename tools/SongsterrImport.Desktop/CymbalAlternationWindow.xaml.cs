@@ -1,6 +1,7 @@
 using Microsoft.Win32;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -12,19 +13,109 @@ public partial class CymbalAlternationWindow : Window
 {
     private readonly ObservableCollection<TickIntervalItem> _intervalItems = new();
 
+    private bool _isLoadingState;
+
     public CymbalAlternationWindow()
     {
         InitializeComponent();
-        CymbalComboBox.ItemsSource = new[]
-        {
-            CymbalType.Yellow,
-            CymbalType.Blue,
-            CymbalType.Green
-        };
-        CymbalComboBox.SelectedItem = CymbalType.Yellow;
         StartTickTextBox.Text = "0";
         EndTickTextBox.Text = "0";
         IntervalsListBox.ItemsSource = _intervalItems;
+        StartTickTextBox.LostFocus += (_, __) => TrySaveState();
+        EndTickTextBox.LostFocus += (_, __) => TrySaveState();
+        MidiPathTextBox.LostFocus += (_, __) => TrySaveState();
+    }
+
+    private void OnWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoadingState = true;
+        try
+        {
+            RestoreState();
+        }
+        finally
+        {
+            _isLoadingState = false;
+        }
+    }
+
+    private void OnWindowClosing(object? sender, CancelEventArgs e)
+    {
+        TrySaveState();
+    }
+
+    private void RestoreState()
+    {
+        (CymbalAlternationStateDto? state, string? loadError) = CymbalAlternationStateStore.Load();
+        if (loadError is not null)
+        {
+            ResultTextBox.Text = loadError;
+            return;
+        }
+
+        if (state is null)
+        {
+            return;
+        }
+
+        if (state.MidiPath is { Length: > 0 } savedMidi)
+        {
+            MidiPathTextBox.Text = savedMidi;
+        }
+
+        if (state.StartTickText is { Length: > 0 } startText)
+        {
+            StartTickTextBox.Text = startText;
+        }
+
+        if (state.EndTickText is { Length: > 0 } endText)
+        {
+            EndTickTextBox.Text = endText;
+        }
+
+        _intervalItems.Clear();
+        if (state.Intervals is not null)
+        {
+            foreach (CymbalIntervalDto entry in state.Intervals)
+            {
+                _intervalItems.Add(new TickIntervalItem(entry.Start, entry.End));
+            }
+        }
+    }
+
+    private void TrySaveState()
+    {
+        if (_isLoadingState)
+        {
+            return;
+        }
+
+        var state = new CymbalAlternationStateDto
+        {
+            MidiPath = MidiPathTextBox.Text,
+            StartTickText = StartTickTextBox.Text,
+            EndTickText = EndTickTextBox.Text,
+            Intervals = _intervalItems
+                .Select(item => new CymbalIntervalDto
+                {
+                    Start = item.StartTick,
+                    End = item.EndTick
+                })
+                .ToList()
+        };
+
+        try
+        {
+            CymbalAlternationStateStore.Save(state);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(
+                "Could not save your cymbal tool session. " + ex.Message,
+                "Cymbal session",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void OnBrowseMidiClick(object sender, RoutedEventArgs e)
@@ -40,6 +131,7 @@ public partial class CymbalAlternationWindow : Window
         if (result == true)
         {
             MidiPathTextBox.Text = dialog.FileName;
+            TrySaveState();
         }
     }
 
@@ -59,30 +151,24 @@ public partial class CymbalAlternationWindow : Window
             }
 
             ExecuteButton.IsEnabled = false;
-            IReadOnlyList<(CymbalType Cymbal, long Start, long End)> withCymbals = _intervalItems
-                .Select(interval => (interval.Cymbal, interval.StartTick, interval.EndTick))
+            IReadOnlyList<(long start, long end)> tickRanges = _intervalItems
+                .Select(interval => (interval.StartTick, interval.EndTick))
                 .ToList();
-            string cymbalsLine = string.Join(
-                ", ",
-                withCymbals
-                    .Select(x => x.Cymbal)
-                    .Distinct()
-                    .Select(CymbalAlternationFormat.FormatCymbal)
-                    .OrderBy(name => name));
             CymbalAlternationResult result = CymbalAlternationService.ApplyAlternation(
                 midiPath: midiPath,
-                intervals: withCymbals
+                intervals: tickRanges
             );
 
             var messageBuilder = new StringBuilder();
             messageBuilder.AppendLine("Alternation completed.");
             messageBuilder.AppendLine("File: " + result.MidiPath);
-            messageBuilder.AppendLine("Cymbals in intervals: " + cymbalsLine);
+            messageBuilder.AppendLine("Backup: " + result.BackupFilePath);
             messageBuilder.AppendLine("Intervals: " + result.IntervalCount);
             messageBuilder.AppendLine("Combined tick range: " + result.StartTick + " to " + result.EndTick);
-            messageBuilder.AppendLine("Candidate cymbal notes: " + result.CandidateCount);
+            messageBuilder.AppendLine("Candidate cymbal notes (all expert cymbals): " + result.CandidateCount);
             messageBuilder.AppendLine("Removed notes: " + result.RemovedCount);
             ResultTextBox.Text = messageBuilder.ToString();
+            TrySaveState();
         }
         catch (Exception ex)
         {
@@ -98,11 +184,6 @@ public partial class CymbalAlternationWindow : Window
     {
         try
         {
-            if (CymbalComboBox.SelectedItem is not CymbalType defaultCymbal)
-            {
-                throw new InvalidOperationException("Please select a cymbal for the new interval.");
-            }
-
             if (!long.TryParse(StartTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long startTick))
             {
                 throw new InvalidOperationException("Start tick must be an integer.");
@@ -123,16 +204,15 @@ public partial class CymbalAlternationWindow : Window
                 throw new InvalidOperationException("End tick must be >= start tick.");
             }
 
-            bool alreadyExists = _intervalItems.Any(interval => interval.Cymbal == defaultCymbal
-                && interval.StartTick == startTick
-                && interval.EndTick == endTick);
+            bool alreadyExists = _intervalItems.Any(interval => interval.StartTick == startTick && interval.EndTick == endTick);
             if (alreadyExists)
             {
                 throw new InvalidOperationException("This interval is already in the list.");
             }
 
-            _intervalItems.Add(new TickIntervalItem(defaultCymbal, startTick, endTick));
-            ResultTextBox.Text = "Interval added: " + CymbalAlternationFormat.FormatCymbal(defaultCymbal) + " " + startTick + " to " + endTick;
+            _intervalItems.Add(new TickIntervalItem(startTick, endTick));
+            ResultTextBox.Text = "Interval added: " + startTick + " to " + endTick;
+            TrySaveState();
         }
         catch (Exception ex)
         {
@@ -150,20 +230,25 @@ public partial class CymbalAlternationWindow : Window
 
         _intervalItems.Remove(selectedItem);
         ResultTextBox.Text = "Interval removed: " + selectedItem;
+        TrySaveState();
+    }
+
+    private void OnClearIntervalsClick(object sender, RoutedEventArgs e)
+    {
+        _intervalItems.Clear();
+        ResultTextBox.Text = "Intervals cleared.";
+        TrySaveState();
     }
 
 }
 
 internal sealed class TickIntervalItem
 {
-    internal TickIntervalItem(CymbalType cymbal, long startTick, long endTick)
+    internal TickIntervalItem(long startTick, long endTick)
     {
-        Cymbal = cymbal;
         StartTick = startTick;
         EndTick = endTick;
     }
-
-    internal CymbalType Cymbal { get; }
 
     internal long StartTick { get; }
 
@@ -171,29 +256,6 @@ internal sealed class TickIntervalItem
 
     public override string ToString()
     {
-        return CymbalAlternationFormat.FormatCymbal(Cymbal) + " | Start: " + StartTick + " | End: " + EndTick;
-    }
-}
-
-internal static class CymbalAlternationFormat
-{
-    internal static string FormatCymbal(CymbalType cymbalType)
-    {
-        if (cymbalType == CymbalType.Yellow)
-        {
-            return "yellow";
-        }
-
-        if (cymbalType == CymbalType.Blue)
-        {
-            return "blue";
-        }
-
-        if (cymbalType == CymbalType.Green)
-        {
-            return "green";
-        }
-
-        return cymbalType.ToString();
+        return "Start: " + StartTick + " | End: " + EndTick;
     }
 }

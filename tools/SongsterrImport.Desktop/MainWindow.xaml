@@ -404,7 +404,7 @@
 
         <GroupBox Grid.Row="1" Header="Process Song" Padding="6" Margin="0,0,0,8">
             <StackPanel>
-                <Grid>
+    <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
