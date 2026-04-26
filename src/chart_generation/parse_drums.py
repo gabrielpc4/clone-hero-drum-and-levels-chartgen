@@ -4,6 +4,7 @@ Parser de PART DRUMS — Harmonix RB MIDI / Clone Hero.
 Estrutura confirmada nas 6 músicas SOAD:
 
 Pitches por dificuldade (Kick / Snare / Yellow / Blue / Green):
+    Terminologia: amarelo = tipicamente hi-hat, azul = ride, verde = crash.
     Easy   : 60, 61, 62, 63, 64
     Medium : 72, 73, 74, 75, 76
     Hard   : 84, 85, 86, 87, 88
@@ -55,8 +56,9 @@ TOM_FLAG_PITCHES = {LANE_YELLOW: 110, LANE_BLUE: 111, LANE_GREEN: 112}
 @dataclass
 class DrumNote:
     tick: int
-    lane: int            # 0=Kick, 1=Snare, 2=Yellow, 3=Blue, 4=Green
-    is_cymbal: bool = False  # só relevante para Y/B/G (Pro Drums)
+    # 0=Kick, 1=Snare, 2/3/4 = Y/B/G (Y hi-hat, B ride, G crash em Pro Drums)
+    lane: int
+    is_cymbal: bool = False  # só Y/B/G (prato vs tom)
     is_2x_kick: bool = False
     velocity: int = 100
 
@@ -76,6 +78,22 @@ class DrumChart:
     overdrive: List[Tuple[int, int]] = field(default_factory=list)
     drum_fills: List[Tuple[int, int]] = field(default_factory=list)
     cymbal_flags: Dict[int, List[Tuple[int, int]]] = field(default_factory=dict)
+    # (tick, numerator, denominator) from MIDI; denominator is notated value (2,4,8,…).
+    time_signatures: List[Tuple[int, int, int]] = field(default_factory=lambda: [(0, 4, 4)])
+
+
+def collect_time_signatures_from_midi_file(mid: mido.MidiFile) -> List[Tuple[int, int, int]]:
+    out: List[Tuple[int, int, int]] = []
+    for tr in mid.tracks:
+        t = 0
+        for msg in tr:
+            t += msg.time
+            if msg.is_meta and msg.type == "time_signature":
+                out.append((t, int(msg.numerator), int(msg.denominator)))
+    out.sort(key=lambda x: x[0])
+    if not out:
+        return [(0, 4, 4)]
+    return out
 
 
 def _decode_note_pairs(track):
@@ -129,11 +147,17 @@ def parse_drums(mid: mido.MidiFile) -> Dict[str, DrumChart]:
             if s <= tick < e: return True
         return False
 
+    time_sigs = collect_time_signatures_from_midi_file(mid)
     charts: Dict[str, DrumChart] = {}
     for diff, base in DIFF_BASE_DRUMS.items():
-        c = DrumChart(difficulty=diff, ticks_per_beat=tpb,
-                      overdrive=overdrive, drum_fills=drum_fills,
-                      cymbal_flags=tom_intervals)  # mantém o nome do campo para compat
+        c = DrumChart(
+            difficulty=diff,
+            ticks_per_beat=tpb,
+            overdrive=overdrive,
+            drum_fills=drum_fills,
+            cymbal_flags=tom_intervals,  # mantém o nome do campo para compat
+            time_signatures=time_sigs,
+        )
         for s, e, p, v in pairs:
             offset = p - base
             if 0 <= offset <= 4:
