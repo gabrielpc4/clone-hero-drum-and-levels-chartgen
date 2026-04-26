@@ -1,19 +1,25 @@
-using Microsoft.Win32;
-using System.Collections.Generic;
+// Author: Gabriel Pinheiro de Carvalho
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Drawing;
 using System.Globalization;
-using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Interop;
+using Microsoft.Win32;
 
 namespace SongsterrImport.Desktop;
 
 public partial class CymbalAlternationWindow : Window
 {
     private readonly ObservableCollection<TickIntervalItem> _intervalItems = new();
+    private readonly CymbalRegionPreviewControl _regionPreview;
 
     private bool _isLoadingState;
+    private nint _cymbalToolWindowHandle;
+    private bool _nextOcrFillsStart = true;
 
     public CymbalAlternationWindow()
     {
@@ -24,10 +30,28 @@ public partial class CymbalAlternationWindow : Window
         StartTickTextBox.LostFocus += (_, __) => TrySaveState();
         EndTickTextBox.LostFocus += (_, __) => TrySaveState();
         MidiPathTextBox.LostFocus += (_, __) => TrySaveState();
+
+        _regionPreview = new CymbalRegionPreviewControl
+        {
+            OcrClientRegion = new Rectangle(0, 0, 100, 28)
+        };
+        _regionPreview.ClientRegionChanged += OnOcrClientRegionChanged;
+        RegionPreviewHost.Child = _regionPreview;
+        UpdateOcrHint();
+    }
+
+    private void OnOcrClientRegionChanged(object? sender, CymbalOcrRegionChangedEventArgs e)
+    {
+        if (!_isLoadingState)
+        {
+            TrySaveState();
+        }
     }
 
     private void OnWindowLoaded(object sender, RoutedEventArgs e)
     {
+        nint h = (nint)new WindowInteropHelper(this).Handle;
+        _cymbalToolWindowHandle = h;
         _isLoadingState = true;
         try
         {
@@ -36,6 +60,10 @@ public partial class CymbalAlternationWindow : Window
         finally
         {
             _isLoadingState = false;
+        }
+        if (OcrTargetCombo.Items.Count > 0 && OcrTargetCombo.SelectedItem is not null)
+        {
+            TryRefreshOcrBitmap();
         }
     }
 
@@ -81,6 +109,84 @@ public partial class CymbalAlternationWindow : Window
                 _intervalItems.Add(new TickIntervalItem(entry.Start, entry.End));
             }
         }
+
+        if (state.OcrTarget is { } ocr)
+        {
+            if (ocr.Width > 0 && ocr.Height > 0)
+            {
+                _regionPreview.OcrClientRegion = new Rectangle(ocr.Left, ocr.Top, ocr.Width, ocr.Height);
+            }
+
+            RefillOcrTargetCombo(
+                new CymbalOcrSessionSelection(ocr.TargetWindowTitle, ocr.TargetProcessName),
+                ocr
+            );
+        }
+        else
+        {
+            RefillOcrTargetCombo(null, null);
+        }
+    }
+
+    private sealed class CymbalOcrSessionSelection
+    {
+        public CymbalOcrSessionSelection(string? title, string? process)
+        {
+            TargetWindowTitle = title;
+            TargetProcessName = process;
+        }
+
+        public string? TargetWindowTitle { get; }
+
+        public string? TargetProcessName { get; }
+    }
+
+    private void RefillOcrTargetCombo(
+        CymbalOcrSessionSelection? trySelect,
+        CymbalOcrStateDto? fromRestore)
+    {
+        IReadOnlyList<CymbalWindowOption> options = CymbalWindowEnumerator.GetVisibleTopLevelOptions(
+            _cymbalToolWindowHandle == nint.Zero ? null : _cymbalToolWindowHandle
+        );
+
+        OcrTargetCombo.ItemsSource = null;
+        OcrTargetCombo.ItemsSource = options;
+
+        CymbalWindowOption? toSelect = null;
+        if (trySelect is not null && !string.IsNullOrWhiteSpace(trySelect.TargetWindowTitle))
+        {
+            toSelect = CymbalWindowEnumerator.FindOptionByTitle(
+                options,
+                trySelect.TargetWindowTitle!,
+                trySelect.TargetProcessName
+            );
+        }
+        else if (fromRestore is { TargetWindowTitle: { Length: > 0 } t })
+        {
+            toSelect = CymbalWindowEnumerator.FindOptionByTitle(
+                options,
+                t,
+                fromRestore.TargetProcessName
+            );
+        }
+
+        if (toSelect is { Handle: not 0 } found)
+        {
+            SetComboSelectionByWindowHandle(options, found.Handle);
+        }
+    }
+
+    private void SetComboSelectionByWindowHandle(IReadOnlyList<CymbalWindowOption> options, nint handle)
+    {
+        IReadOnlyList<CymbalWindowOption> asList = options;
+        for (int i = 0; i < asList.Count; i++)
+        {
+            if (asList[i].Handle == handle)
+            {
+                OcrTargetCombo.SelectedIndex = i;
+                return;
+            }
+        }
     }
 
     private void TrySaveState()
@@ -96,13 +202,29 @@ public partial class CymbalAlternationWindow : Window
             StartTickText = StartTickTextBox.Text,
             EndTickText = EndTickTextBox.Text,
             Intervals = _intervalItems
-                .Select(item => new CymbalIntervalDto
-                {
-                    Start = item.StartTick,
-                    End = item.EndTick
-                })
+                .Select(
+                    item => new CymbalIntervalDto
+                    {
+                        Start = item.StartTick,
+                        End = item.EndTick
+                    }
+                )
                 .ToList()
         };
+
+        if (OcrTargetCombo.SelectedItem is CymbalWindowOption selected)
+        {
+            Rectangle r = _regionPreview.OcrClientRegion;
+            state.OcrTarget = new CymbalOcrStateDto
+            {
+                TargetWindowTitle = selected.Title,
+                TargetProcessName = selected.ProcessName,
+                Left = r.X,
+                Top = r.Y,
+                Width = r.Width,
+                Height = r.Height
+            };
+        }
 
         try
         {
@@ -114,8 +236,180 @@ public partial class CymbalAlternationWindow : Window
                 "Could not save your cymbal tool session. " + ex.Message,
                 "Cymbal session",
                 MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+                MessageBoxImage.Warning
+            );
         }
+    }
+
+    private void OnRefreshWindowListClick(object sender, RoutedEventArgs e)
+    {
+        CymbalWindowOption? current = OcrTargetCombo.SelectedItem is CymbalWindowOption o ? o : null;
+        RefillOcrTargetCombo(
+            current is { } c ? new CymbalOcrSessionSelection(c.Title, c.ProcessName) : null,
+            null
+        );
+    }
+
+    private void OnOcrTargetChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingState)
+        {
+            return;
+        }
+
+        TrySaveState();
+    }
+
+    private void OnOcrDrawRegionToggled(object sender, RoutedEventArgs e)
+    {
+        _regionPreview.EditMode = OcrDrawRegionCheck.IsChecked == true
+            ? CymbalOcrEditMode.Draw
+            : CymbalOcrEditMode.None;
+    }
+
+    private void OnRefreshOcrPreviewClick(object sender, RoutedEventArgs e)
+    {
+        TryRefreshOcrBitmap();
+    }
+
+    private void TryRefreshOcrBitmap()
+    {
+        if (OcrTargetCombo.SelectedItem is not CymbalWindowOption w)
+        {
+            ResultTextBox.Text = "Select a target window first.";
+            return;
+        }
+
+        if (CymbalClientBitmapCapture.TryCaptureClientBitmap(w.Handle) is { } cap)
+        {
+            _regionPreview.PreviewBitmap = cap;
+        }
+    }
+
+    private async void OnOcrReadClick(object sender, RoutedEventArgs e)
+    {
+        if (OcrTargetCombo.SelectedItem is not CymbalWindowOption w)
+        {
+            ResultTextBox.Text = "Select a target window.";
+            return;
+        }
+
+        if (_regionPreview.OcrClientRegion.Width < 4 || _regionPreview.OcrClientRegion.Height < 4)
+        {
+            ResultTextBox.Text = "Draw a larger OCR region (check \"Draw OCR region\").";
+            return;
+        }
+
+        if (CymbalClientBitmapCapture.TryCaptureClientBitmap(w.Handle) is not { } full)
+        {
+            ResultTextBox.Text = "Could not capture that window.";
+            return;
+        }
+
+        OcrReadButton.IsEnabled = false;
+        try
+        {
+            using (full)
+            {
+                if (CymbalBitmapCrop.CropToRegion(full, _regionPreview.OcrClientRegion) is not { } crop)
+                {
+                    return;
+                }
+
+                using (crop)
+                {
+                    long? n = await CymbalOcrService
+                        .TryReadTickNumberFromBitmapAsync(crop, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    if (n is not { } tick)
+                    {
+                        ResultTextBox.Text = "OCR did not find a number. Adjust region or zoom.";
+                        return;
+                    }
+
+                    ApplyOcrTick(tick);
+                }
+            }
+        }
+        finally
+        {
+            OcrReadButton.IsEnabled = true;
+        }
+    }
+
+    private void UpdateOcrHint()
+    {
+        if (_nextOcrFillsStart)
+        {
+            OcrFieldHintText.Text =
+                "Next read fills Start. Then read again for End (the pair is auto-added to the list).";
+        }
+        else
+        {
+            OcrFieldHintText.Text =
+                "Next read fills End, then the interval is appended and the next read goes to Start again.";
+        }
+    }
+
+    private void ApplyOcrTick(long tick)
+    {
+        if (_nextOcrFillsStart)
+        {
+            StartTickTextBox.Text = tick.ToString(CultureInfo.InvariantCulture);
+            _nextOcrFillsStart = false;
+            ResultTextBox.Text = "OCR: Start = " + tick;
+        }
+        else
+        {
+            EndTickTextBox.Text = tick.ToString(CultureInfo.InvariantCulture);
+            ResultTextBox.Text = "OCR: End = " + tick;
+            TryAutocommitIntervalFromFields();
+        }
+
+        UpdateOcrHint();
+        TrySaveState();
+    }
+
+    private void TryAutocommitIntervalFromFields()
+    {
+        if (!long.TryParse(StartTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long startT))
+        {
+            return;
+        }
+
+        if (!long.TryParse(EndTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long endT))
+        {
+            return;
+        }
+
+        if (startT < 0)
+        {
+            return;
+        }
+
+        if (endT < startT)
+        {
+            ResultTextBox.Text = "OCR: End is before Start. Fix the fields or re-read.";
+            return;
+        }
+
+        bool already = _intervalItems.Any(i => i.StartTick == startT && i.EndTick == endT);
+        if (already)
+        {
+            _nextOcrFillsStart = true;
+            StartTickTextBox.Text = "0";
+            EndTickTextBox.Text = "0";
+            UpdateOcrHint();
+            ResultTextBox.Text = "Interval " + startT + " to " + endT + " already in list. Cleared; next OCR = Start.";
+            return;
+        }
+
+        _intervalItems.Add(new TickIntervalItem(startT, endT));
+        _nextOcrFillsStart = true;
+        StartTickTextBox.Text = "0";
+        EndTickTextBox.Text = "0";
+        UpdateOcrHint();
+        ResultTextBox.Text = "Added interval: " + startT + " \u2013 " + endT + ". Next OCR = Start.";
     }
 
     private void OnBrowseMidiClick(object sender, RoutedEventArgs e)
@@ -127,8 +421,7 @@ public partial class CymbalAlternationWindow : Window
             CheckFileExists = true,
             Multiselect = false
         };
-        bool? result = dialog.ShowDialog(this);
-        if (result == true)
+        if (dialog.ShowDialog(this) == true)
         {
             MidiPathTextBox.Text = dialog.FileName;
             TrySaveState();
@@ -147,27 +440,27 @@ public partial class CymbalAlternationWindow : Window
 
             if (_intervalItems.Count == 0)
             {
-                throw new InvalidOperationException("Please add at least one interval with the + button.");
+                throw new InvalidOperationException("Add at least one tick interval (manually or via OCR).");
             }
 
             ExecuteButton.IsEnabled = false;
             IReadOnlyList<(long start, long end)> tickRanges = _intervalItems
                 .Select(interval => (interval.StartTick, interval.EndTick))
                 .ToList();
-            CymbalAlternationResult result = CymbalAlternationService.ApplyAlternation(
+            CymbalAlternationResult res = CymbalAlternationService.ApplyAlternation(
                 midiPath: midiPath,
                 intervals: tickRanges
             );
 
-            var messageBuilder = new StringBuilder();
-            messageBuilder.AppendLine("Alternation completed.");
-            messageBuilder.AppendLine("File: " + result.MidiPath);
-            messageBuilder.AppendLine("Backup: " + result.BackupFilePath);
-            messageBuilder.AppendLine("Intervals: " + result.IntervalCount);
-            messageBuilder.AppendLine("Combined tick range: " + result.StartTick + " to " + result.EndTick);
-            messageBuilder.AppendLine("Candidate cymbal notes (all expert cymbals): " + result.CandidateCount);
-            messageBuilder.AppendLine("Removed notes: " + result.RemovedCount);
-            ResultTextBox.Text = messageBuilder.ToString();
+            var b = new StringBuilder();
+            b.AppendLine("Alternation completed.");
+            b.AppendLine("File: " + res.MidiPath);
+            b.AppendLine("Backup: " + res.BackupFilePath);
+            b.AppendLine("Intervals: " + res.IntervalCount);
+            b.AppendLine("Combined tick range: " + res.StartTick + " to " + res.EndTick);
+            b.AppendLine("Candidate cymbal notes: " + res.CandidateCount);
+            b.AppendLine("Removed notes: " + res.RemovedCount);
+            ResultTextBox.Text = b.ToString();
             TrySaveState();
         }
         catch (Exception ex)
@@ -184,34 +477,33 @@ public partial class CymbalAlternationWindow : Window
     {
         try
         {
-            if (!long.TryParse(StartTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long startTick))
+            if (!long.TryParse(StartTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long st))
             {
                 throw new InvalidOperationException("Start tick must be an integer.");
             }
 
-            if (!long.TryParse(EndTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long endTick))
+            if (!long.TryParse(EndTickTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long et))
             {
                 throw new InvalidOperationException("End tick must be an integer.");
             }
 
-            if (startTick < 0)
+            if (st < 0)
             {
-                throw new InvalidOperationException("Start tick must be >= 0.");
+                throw new InvalidOperationException("Start tick must be non-negative.");
             }
 
-            if (endTick < startTick)
+            if (et < st)
             {
                 throw new InvalidOperationException("End tick must be >= start tick.");
             }
 
-            bool alreadyExists = _intervalItems.Any(interval => interval.StartTick == startTick && interval.EndTick == endTick);
-            if (alreadyExists)
+            if (_intervalItems.Any(i => i.StartTick == st && i.EndTick == et))
             {
                 throw new InvalidOperationException("This interval is already in the list.");
             }
 
-            _intervalItems.Add(new TickIntervalItem(startTick, endTick));
-            ResultTextBox.Text = "Interval added: " + startTick + " to " + endTick;
+            _intervalItems.Add(new TickIntervalItem(st, et));
+            ResultTextBox.Text = "Interval added: " + st + " to " + et;
             TrySaveState();
         }
         catch (Exception ex)
@@ -222,24 +514,25 @@ public partial class CymbalAlternationWindow : Window
 
     private void OnRemoveIntervalClick(object sender, RoutedEventArgs e)
     {
-        if (IntervalsListBox.SelectedItem is not TickIntervalItem selectedItem)
+        if (IntervalsListBox.SelectedItem is not TickIntervalItem i)
         {
-            ResultTextBox.Text = "Error: Select an interval to remove.";
+            ResultTextBox.Text = "Select an interval to remove.";
             return;
         }
 
-        _intervalItems.Remove(selectedItem);
-        ResultTextBox.Text = "Interval removed: " + selectedItem;
+        _ = _intervalItems.Remove(i);
+        ResultTextBox.Text = "Removed: " + i;
         TrySaveState();
     }
 
     private void OnClearIntervalsClick(object sender, RoutedEventArgs e)
     {
         _intervalItems.Clear();
+        _nextOcrFillsStart = true;
+        UpdateOcrHint();
         ResultTextBox.Text = "Intervals cleared.";
         TrySaveState();
     }
-
 }
 
 internal sealed class TickIntervalItem

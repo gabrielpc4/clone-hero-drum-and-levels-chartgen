@@ -1,4 +1,4 @@
-﻿// Author: Gabriel Pinheiro de Carvalho
+// Author: Gabriel Pinheiro de Carvalho
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -49,7 +49,6 @@ public partial class MainWindow : Window
 
     // Defaults (no UI; change here or ask the assistant to adjust).
     private const string DefaultInitialOffsetTicks = "768";
-    private const string DefaultFlamAssumptionBeats = "0.0625";
     private const string DefaultReferenceChartPath = "";
     private static readonly Regex SongsterrManualMidiPattern = new(
         @"^.*(?<month>\d{2})-(?<day>\d{2})-(?<year>\d{4})\.mid$",
@@ -92,11 +91,11 @@ public partial class MainWindow : Window
         _repositoryRootDisplay = RepositoryPaths.ToDisplayWithEnvironmentPrefix(guess);
         Closing += OnMainWindowClosing;
         IncludeSoftNotesCheck.IsChecked = AppServices.ReadIncludeSoftNotesEnabled(defaultValue: true);
-        ConvertFlamsToDoubleCheck.IsChecked = AppServices.ReadConvertFlamsToDoubleEnabled(defaultValue: false);
+        ExpertCymbalAlternationWholeCheck.IsChecked = AppServices.ReadExpertCymbalAlternationWholeEnabled(defaultValue: false);
         IncludeSoftNotesCheck.Checked += OnImportOptionsCheckChanged;
         IncludeSoftNotesCheck.Unchecked += OnImportOptionsCheckChanged;
-        ConvertFlamsToDoubleCheck.Checked += OnImportOptionsCheckChanged;
-        ConvertFlamsToDoubleCheck.Unchecked += OnImportOptionsCheckChanged;
+        ExpertCymbalAlternationWholeCheck.Checked += OnImportOptionsCheckChanged;
+        ExpertCymbalAlternationWholeCheck.Unchecked += OnImportOptionsCheckChanged;
         SongsListView.ItemsSource = _songSource;
         ApplySongFilter();
         LoadSongs();
@@ -105,7 +104,7 @@ public partial class MainWindow : Window
 
     private static string DefaultRepoRootGuess()
     {
-        // tools/SongsterrImport.Desktop/bin/Debug/net8.0-windows/ -> 5x .. -> repo root
+        // tools/SongsterrImport.Desktop/bin/Debug/net8.0-windows10.0.19041.0/ -> 5x .. -> repo root
         string here = AppContext.BaseDirectory;
         var di = new DirectoryInfo(here);
         for (int i = 0; i < 5 && di is not null; i++)
@@ -135,9 +134,9 @@ public partial class MainWindow : Window
     private void PersistImportOptions()
     {
         bool includeSoftNotes = IncludeSoftNotesCheck.IsChecked == true;
-        bool convertFlamsToDouble = ConvertFlamsToDoubleCheck.IsChecked == true;
+        bool expertCymbalAlt = ExpertCymbalAlternationWholeCheck.IsChecked == true;
         AppServices.WriteIncludeSoftNotesEnabled(includeSoftNotes);
-        AppServices.WriteConvertFlamsToDoubleEnabled(convertFlamsToDouble);
+        AppServices.WriteExpertCymbalAlternationWholeEnabled(expertCymbalAlt);
     }
 
     private void LoadSongs()
@@ -713,16 +712,14 @@ public partial class MainWindow : Window
         }
 
         var list = new List<string> { ImportScript, inputMid, outMid, "--initial-offset-ticks", DefaultInitialOffsetTicks };
-        string flamBeats = DefaultFlamAssumptionBeats.Replace(',', '.').Trim();
-        list.AddRange(new[] { "--dedup-beats", flamBeats });
         if (IncludeSoftNotesCheck.IsChecked != true)
         {
             list.Add("--filter-weak-snares");
         }
 
-        if (ConvertFlamsToDoubleCheck.IsChecked != true)
+        if (ExpertCymbalAlternationWholeCheck.IsChecked == true)
         {
-            list.Add("--no-convert-flams");
+            list.Add("--expert-cymbal-alternation-whole");
         }
 
         string reff = DefaultReferenceChartPath.Trim();

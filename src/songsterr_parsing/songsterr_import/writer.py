@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
@@ -7,6 +8,12 @@ from typing import Callable, Dict, List, Optional, Tuple
 import mido
 
 from parse_drums import LANE_BLUE, LANE_GREEN, LANE_SNARE, LANE_YELLOW
+
+# Expert Y/B/G (cymbals) e markers de tom; alternância 1/8 do import = writer (G imune), não 1:1 C#
+# Expert kick / snare / Y / B / G: 96, 97, 98, 99, 100 (parse_drums)
+EXPERT_CYMBAL_PITCHES = (98, 99, 100)
+EXPERT_SNARE_PITCH = 97
+TOM_MARKER_PITCH_BY_EXPERT = {98: 110, 99: 111, 100: 112}
 
 from .constants import should_keep_source_hit
 from .mapping import (
@@ -29,9 +36,7 @@ class MappedDrumEvent:
 
 def collect_mapped_drum_events(
     src_mid: mido.MidiFile,
-    dedup_beats: float = 1 / 16,
     minimum_snare_velocity: int | None = None,
-    convert_flams_to_double_note: bool = True,
 ) -> list[MappedDrumEvent]:
     src_tpb = src_mid.ticks_per_beat
     drum_selection = select_source_drum_track(
@@ -63,14 +68,10 @@ def collect_mapped_drum_events(
         f"channel9_hits={drum_selection.channel9_hits}"
     )
 
-    dedup_gap_ticks = int(round(src_tpb * dedup_beats))
     weak_snare_gap_ticks = max(1, src_tpb // 8)
     should_filter_weak_snares = minimum_snare_velocity is not None
-    last_note_by_lane: Dict[Tuple[int, bool], int] = {}
     last_snare_tick_by_pitch: Dict[int, int] = {}
-    skipped_flams = set()
     skipped_weak_snares = set()
-    snare_flam_second_to_first: Dict[Tuple[int, int], int] = {}
     absolute_source_tick = 0
 
     for message in drum_track:
@@ -112,24 +113,6 @@ def collect_mapped_drum_events(
 
             last_snare_tick_by_pitch[message.note] = absolute_source_tick
 
-        lane_key = (lane_value, is_cymbal)
-        previous_tick = last_note_by_lane.get(lane_key)
-
-        if (
-            convert_flams_to_double_note
-            and previous_tick is not None
-            and absolute_source_tick - previous_tick <= dedup_gap_ticks
-        ):
-            if lane_value == LANE_SNARE:
-                skipped_weak_snares.discard((previous_tick, message.note))
-                snare_flam_second_to_first[(absolute_source_tick, message.note)] = previous_tick
-            else:
-                skipped_flams.add((absolute_source_tick, message.note))
-
-            continue
-
-        last_note_by_lane[lane_key] = absolute_source_tick
-
     absolute_source_tick = 0
     mapped_events: list[MappedDrumEvent] = []
 
@@ -151,11 +134,7 @@ def collect_mapped_drum_events(
         if (absolute_source_tick, message.note) in skipped_weak_snares:
             continue
 
-        if (absolute_source_tick, message.note) in skipped_flams:
-            continue
-
-        flam_first_tick = snare_flam_second_to_first.get((absolute_source_tick, message.note))
-        source_tick = flam_first_tick if flam_first_tick is not None else absolute_source_tick
+        source_tick = absolute_source_tick
 
         overridden_lane_value = tom_lane_overrides.get((absolute_source_tick, message.note))
 
@@ -168,10 +147,6 @@ def collect_mapped_drum_events(
 
         if lane_value is None:
             continue
-
-        if flam_first_tick is not None:
-            lane_value = LANE_YELLOW
-            is_cymbal = False
 
         mapped_events.append(
             MappedDrumEvent(
@@ -256,17 +231,264 @@ def build_part_drums_track(
     return track
 
 
+def _build_tom_intervals_for_marker(
+    part_drums_track: mido.MidiTrack, marker_pitch: int
+) -> list[tuple[int, int]]:
+    """
+    Intervalos [start, end) em que o marker 110/111/112 indica “tom” na lane
+    (paridade com CymbalAlternationService.BuildTomIntervals + IsTickInsideTomInterval).
+    """
+    abs_tick = 0
+    is_active = False
+    start_tick = 0
+    intervals: list[tuple[int, int]] = []
+    for message in part_drums_track:
+        abs_tick += message.time
+        if message.type == "note_on" and (int(message.note) if hasattr(message, "note") else -1) == marker_pitch:
+            if message.velocity > 0:
+                if not is_active:
+                    is_active = True
+                    start_tick = abs_tick
+            else:
+                if is_active:
+                    intervals.append((start_tick, abs_tick))
+                    is_active = False
+        elif message.type == "note_off" and int(message.note) == marker_pitch:
+            if is_active:
+                intervals.append((start_tick, abs_tick))
+                is_active = False
+    if is_active:
+        intervals.append((start_tick, 10**18))
+    return intervals
+
+
+def _expert_cymbal_tick_is_tom(
+    tick: int, expert_pitch: int, tom_by_expert: dict[int, list[tuple[int, int]]]
+) -> bool:
+    for start_t, end_t in tom_by_expert.get(expert_pitch, ()):
+        if start_t <= tick < end_t:
+            return True
+    return False
+
+
+def _eighth_duration_ticks(ticks_per_beat: int) -> int:
+    """
+    Colcheia = metade de uma semínima em ticks (semínima = tpb); alinha a passo 1/16
+    com nota 1/8 a cada duas linhas. O compasso não muda tpb, só a divisão da barra.
+    """
+    return max(1, int(ticks_per_beat) // 2)
+
+
+def _gap_is_steady_musical_eighth(gap: int, eighth_duration_ticks: int) -> bool:
+    """Colcheia estável entre dois hits: intervalo de ~1/2 semínima (não 32a nem pausa de colcheia)."""
+    e = max(1, int(eighth_duration_ticks))
+    gap_int = int(gap)
+    low = max(1, int(0.72 * e))
+    high = int(1.32 * e) + 1
+    return low <= gap_int <= high
+
+
+def _iter_musical_eighth_runs(
+    cymbals_sorted: list[tuple[int, int]], eighth_duration_ticks: int
+) -> list[tuple[int, int]]:
+    """
+    Cortes (start_idx, end_idx) inclusivos, comprimento >= 2, onde pares consecutivos
+    formam cadeia de 1/8. Outros intervalos = quebra (virada, pausa, acorde no mesmo tick).
+    """
+    n = len(cymbals_sorted)
+    if n < 2:
+        return []
+    e = max(1, int(eighth_duration_ticks))
+    runs: list[tuple[int, int]] = []
+    start = 0
+    while start < n:
+        end = start
+        while end + 1 < n and _gap_is_steady_musical_eighth(
+            cymbals_sorted[end + 1][0] - cymbals_sorted[end][0], e
+        ):
+            end += 1
+        if end > start:
+            runs.append((start, end))
+        start = end + 1
+    return runs
+
+
+def _expert_snare_on_ticks_sorted(part_drums_track: mido.MidiTrack) -> list[int]:
+    """Instantes (ticks) de note_on Expert com caixa (97) no PART DRUMS."""
+    out: list[int] = []
+    abs_t = 0
+    for message in part_drums_track:
+        abs_t += message.time
+        if message.type != "note_on" or message.velocity <= 0:
+            continue
+        if int(message.note) == EXPERT_SNARE_PITCH:
+            out.append(abs_t)
+    out.sort()
+    return out
+
+
+def _cymbal_run_includes_expert_snare_in_span(
+    tick_first: int, tick_last: int, snare_ticks_sorted: list[int]
+) -> bool:
+    """Há pelo menos uma caixa (97) entre o primeiro e o último prato da cadeia (inclusive)."""
+    if not snare_ticks_sorted or tick_last < tick_first:
+        return False
+    insert = bisect.bisect_left(snare_ticks_sorted, tick_first)
+    if insert < len(snare_ticks_sorted) and snare_ticks_sorted[insert] <= tick_last:
+        return True
+    return False
+
+
+def _yb_cymbals_to_thin_in_steady_musical_eighth_run(
+    run_segment: list[tuple[int, int]],
+) -> set[tuple[int, int]]:
+    """
+    Só 98/99. Pitch 100 (G) fica fora. Bursts de 2+ da *nova* cor: mantém todos, último
+    revira a fase (virtual). Paridade: com virtual, remove 0,2,4; sem, remove 1,3,5
+    (paridade C# + Cymbal tool, mas só em cadeia de 1/8).
+    """
+    to_remove: set[tuple[int, int]] = set()
+    yb_only: list[tuple[int, int]] = [(t, p) for t, p in run_segment if p in (98, 99)]
+    if len(yb_only) < 2:
+        return to_remove
+
+    has_virtual = run_segment[0][1] == 100
+    yb_index = 0
+    k = 0
+    while yb_index < len(yb_only):
+        t0, p0 = yb_only[yb_index]
+        if (
+            yb_index + 1 < len(yb_only)
+            and p0 == yb_only[yb_index + 1][1]
+            and yb_index > 0
+            and yb_only[yb_index - 1][1] != p0
+        ):
+            block_end = yb_index
+            while block_end < len(yb_only) and yb_only[block_end][1] == p0:
+                block_end += 1
+            if block_end - yb_index >= 2:
+                yb_index = block_end
+                k = 0
+                has_virtual = True
+                continue
+        is_remove = (k % 2 == 0) if has_virtual else (k % 2 == 1)
+        if is_remove:
+            to_remove.add((t0, p0))
+        yb_index += 1
+        k += 1
+    return to_remove
+
+
+def apply_expert_cymbal_alternation_to_part_drums_track(
+    part_drums_track: mido.MidiTrack,
+    ticks_per_beat: int,
+) -> tuple[mido.MidiTrack, int]:
+    """
+    Afinar colcheias Y/B Expert em cadeias estáveis (1/8) na grade musical; 100 (G) imune.
+    Fora de cadeia de 1/8 (virada, 32a, acorde rítmico) não altera. 2+ da *nova* cor: mantém
+    e o último ancora a nova fase. Tom: mesmos intervalos 110/111/112.
+    Só aplica se existir caixa Expert (97) nesse arco: sequência longa de só pratos, ou
+    pratos + bumbo (96) sem 97, não afinar.
+    """
+    _eighth = _eighth_duration_ticks(ticks_per_beat)
+    snare_ticks = _expert_snare_on_ticks_sorted(part_drums_track)
+
+    tom_by_expert: dict[int, list[tuple[int, int]]] = {
+        p: _build_tom_intervals_for_marker(
+            part_drums_track, TOM_MARKER_PITCH_BY_EXPERT[p]
+        )
+        for p in EXPERT_CYMBAL_PITCHES
+    }
+
+    candidates: list[tuple[int, int]] = []
+    abs_t = 0
+    for message in part_drums_track:
+        abs_t += message.time
+        if message.type != "note_on" or message.velocity <= 0:
+            continue
+        pitch = int(message.note)
+        if pitch not in EXPERT_CYMBAL_PITCHES:
+            continue
+        if _expert_cymbal_tick_is_tom(abs_t, pitch, tom_by_expert):
+            continue
+        candidates.append((abs_t, pitch))
+
+    if not candidates:
+        return part_drums_track, 0
+
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    run_ranges = _iter_musical_eighth_runs(candidates, _eighth)
+    to_remove: set[tuple[int, int]] = set()
+    for st, en in run_ranges:
+        part = [candidates[i] for i in range(st, en + 1)]
+        tick_first, tick_last = part[0][0], part[-1][0]
+        if not _cymbal_run_includes_expert_snare_in_span(
+            tick_first, tick_last, snare_ticks
+        ):
+            continue
+        to_remove |= _yb_cymbals_to_thin_in_steady_musical_eighth_run(part)
+
+    if not to_remove:
+        return part_drums_track, 0
+
+    # Reconstrói o track: remove pares (note_on, note_off) para cada (tick, pitch) em to_remove
+    abs_events: list[tuple[int, mido.Message]] = []
+    abs_t = 0
+    for message in part_drums_track:
+        abs_t += message.time
+        if message.is_meta and message.type == "end_of_track":
+            continue
+        abs_events.append((abs_t, message))
+
+    new_events: list[tuple[int, mido.Message]] = []
+    index = 0
+    while index < len(abs_events):
+        abs_tick, msg = abs_events[index]
+        if (
+            msg.type == "note_on"
+            and msg.velocity > 0
+            and int(msg.note) in (98, 99)
+            and (abs_tick, int(msg.note)) in to_remove
+        ):
+            removed_pitch = int(msg.note)
+            index += 1
+            while index < len(abs_events):
+                at2, m2 = abs_events[index]
+                is_close = (m2.type == "note_on" and m2.velocity == 0 and int(m2.note) == removed_pitch) or (
+                    m2.type == "note_off" and int(m2.note) == removed_pitch
+                )
+                if is_close:
+                    index += 1
+                    break
+                new_events.append((at2, m2))
+                index += 1
+            continue
+        new_events.append((abs_tick, msg))
+        index += 1
+
+    if not new_events:
+        new_track = mido.MidiTrack()
+        new_track.append(mido.MetaMessage("end_of_track", time=0))
+        return new_track, len(to_remove)
+
+    new_events.sort(key=lambda item: item[0])
+    out = mido.MidiTrack()
+    last = 0
+    for t_time, m in new_events:
+        m2 = m.copy(time=t_time - last)
+        out.append(m2)
+        last = t_time
+    out.append(mido.MetaMessage("end_of_track", time=0))
+    return out, len(to_remove)
+
+
 def build_drums_track(
     src_mid: mido.MidiFile,
-    dedup_beats: float = 1 / 16,
     minimum_snare_velocity: int | None = None,
-    convert_flams_to_double_note: bool = True,
 ) -> mido.MidiTrack:
     mapped_events = collect_mapped_drum_events(
         src_mid,
-        dedup_beats=dedup_beats,
         minimum_snare_velocity=minimum_snare_velocity,
-        convert_flams_to_double_note=convert_flams_to_double_note,
     )
 
     return build_part_drums_track(
