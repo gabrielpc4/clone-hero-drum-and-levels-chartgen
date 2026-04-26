@@ -1,60 +1,38 @@
 """
-Gerador v3 — pipeline com filtro de densidade-alvo.
+Guitar: reduce Expert para Easy / Medium / Hard (PART GUITAR).
 
-Pipeline:
-  1. classify modes (sustain, power-chord)
-  2. score every Expert note by (sub-beat, duration, isolation, run-position, sustain)
-  3. keep top-N notes  where  N = round(|Expert| * TARGET_DENSITY[diff])
-  4. transform frets via R8 + R14 (anchor by section)
-  5. apply R11/R16 sustain rules + R13 force-HOPO
+Mantém as notas do Expert (Easy pode **descartar** eventos; ver abaixo). Só a
+**dificuldade** muda: faixa de frets, tamanho de acorde, shift de âncora,
+R11/R16 em sustains, R17 em bursts.
+
+**Medium** (`_medium_rapid_chord_simplify`): em alternação muito rápida, três (ou
+mais) vira duas; pares de formas *diferentes* (não a mesma repetida) viram
+singles. Ao vira 2→1, se o **Expert** no mesmo trecho tiver laranja (O), mantém
+a nota “da direita” (fret mais alta); senão mantém a “da esquerda”.
+
+**Easy** (`_easy_enforce_min_gap_eighth_of_bar`): mínimo **1/8 de compasso** entre
+onset consecutivo (4/4 → `tpb/2` ticks); com `time_sigs` do mapa, o oitavo de
+compasso acompanha `num`/`denom` (1/8 da duração da barra).
+
+Ver `reduce_note` e `DIFF_CONF` por nível.
 """
 from __future__ import annotations
 import os, sys
+import bisect
 from collections import defaultdict
 from statistics import median, mean
-from typing import List, Tuple, Optional, Set, Dict
+from typing import List, Tuple, Optional, Dict
 sys.path.insert(0, os.path.dirname(__file__))
 from parse_chart import Chart, Note, FRET_NAMES
+
+# Lane laranja (Direita) em G R Y B O; usado p/ escolher qual fret manter 2→1
+FRET_LARANJA = FRET_NAMES.index("O")
 
 DIFF_CONF = {
     "Easy":   dict(max_chord_size=2, allowed_frets=(0, 1, 2),       anchor_shift=-1.0),
     "Medium": dict(max_chord_size=2, allowed_frets=(0, 1, 2, 3),    anchor_shift=-0.5),
     "Hard":   dict(max_chord_size=2, allowed_frets=(0, 1, 2, 3, 4), anchor_shift= 0.0),
 }
-
-# Densidade-alvo média (fallback) — usada se o modelo adaptativo não puder rodar.
-TARGET_DENSITY = {"Easy": 0.23, "Medium": 0.38, "Hard": 0.65}
-
-# Modelo linear ajustado nas 6 músicas SOAD (RMSE ~0.03 em Easy/Medium, ~0.05 em Hard):
-#   target = a + b * notes_per_beat + c * fração-de-notas-on-beat
-# Features computadas em compute_song_features().
-DENSITY_MODEL = {
-    "Easy":   ( 0.134, -0.0121, 0.3693),
-    "Medium": ( 0.423, -0.0599, 0.3731),
-    "Hard":   ( 0.819, -0.1182, 0.4771),
-}
-
-
-def compute_song_features(expert: Chart):
-    """Devolve (notes_per_beat, sub0_ratio) usados pelo modelo de densidade."""
-    notes = sorted(expert.notes, key=lambda n: n.tick)
-    if not notes: return (0.0, 0.0)
-    tpb = expert.ticks_per_beat
-    span = (notes[-1].tick - notes[0].tick) / tpb
-    npb = len(notes) / span if span > 0 else 0
-    sub0 = sum(1 for n in notes if (n.tick % tpb) // (tpb // 4) == 0) / len(notes)
-    return npb, sub0
-
-
-def predict_target_density(expert: Chart, diff: str) -> float:
-    npb, sub0 = compute_song_features(expert)
-    a, b, c = DENSITY_MODEL[diff]
-    pred = a + b * npb + c * sub0
-    # Clamp a faixa observada (segurança em músicas extremas)
-    bounds = {"Easy": (0.10, 0.35), "Medium": (0.20, 0.55), "Hard": (0.40, 0.90)}
-    lo, hi = bounds[diff]
-    return max(lo, min(hi, pred))
-
 
 def classify_sustain_mode(expert: Chart) -> str:
     if not expert.notes: return "melodic"
@@ -88,103 +66,6 @@ def find_runs(notes: List[Note], tpb: int) -> List[List[int]]:
         cur.append(i)
     if cur: runs.append(cur)
     return runs
-
-
-def score_expert_notes(expert: Chart, diff: str) -> Dict[int, float]:
-    """Atribui score a cada nota Expert.
-       Componentes: sub-beat, duração, posição-na-run, isolamento, mudança de fret,
-       acorde, e (extra para Hard) "pico" local de fret no beat."""
-    tpb = expert.ticks_per_beat
-    notes = sorted(expert.notes, key=lambda n: n.tick)
-    runs = find_runs(notes, tpb)
-    # Indexa por beat para detecção de pico
-    by_beat: Dict[int, List[int]] = defaultdict(list)
-    for i, n in enumerate(notes):
-        by_beat[n.tick // tpb].append(i)
-
-    scores: Dict[int, float] = {}
-    for run in runs:
-        run_size = len(run)
-        for pos_in_run, gi in enumerate(run):
-            n = notes[gi]
-            sub = sub_beat(n.tick, tpb)
-
-            # 1) Sub-beat base (R5) — sub1/sub3 vale mais em Hard (preserva 16ths)
-            if sub == 0:   s = 100
-            elif sub == 2: s = 60
-            elif diff == "Hard": s = 35
-            else:          s = 5
-
-            # 2) Duração — sustains longos sobrescrevem sub-beat
-            if   n.duration >= 2*tpb: s += 120
-            elif n.duration >= tpb:   s += 80
-            elif n.duration >= tpb//2: s += 40
-            elif n.duration >= tpb//4: s += 10
-
-            # 3) Posição na run (bordas) (R9)
-            if run_size > 1:
-                if pos_in_run == 0 or pos_in_run == run_size - 1: s += 18
-                if diff in ("Easy", "Medium") and 0 < pos_in_run < run_size-1 and sub in (1, 3):
-                    s -= 30
-
-            # 4) Isolamento (R15)
-            gap_prev = (n.tick - notes[gi-1].tick) if gi > 0 else 99999
-            gap_next = (notes[gi+1].tick - n.tick) if gi+1 < len(notes) else 99999
-            if gap_prev > tpb and gap_next > tpb:
-                s += 30
-
-            # 5) Mudança de fret-set vs anterior
-            if gi == 0 or notes[gi-1].frets != n.frets:
-                s += 8
-
-            # 6) Bonus para acorde
-            if len(n.frets) >= 2: s += 8
-
-            # 7) NOVO (Hard/Medium): "pico de fret" no beat — nota cujo fret é
-            # mais agudo (B/O) entre as notas do mesmo beat ganha bonus.
-            # Em riffs tipo Aerials (escalar tremolo), a Harmonix preserva os
-            # picos das fundamentais.
-            if diff in ("Hard", "Medium") and n.frets:
-                same_beat = by_beat[n.tick // tpb]
-                if len(same_beat) >= 3:
-                    max_fret_in_beat = max(max(notes[j].frets) for j in same_beat if notes[j].frets)
-                    if max(n.frets) == max_fret_in_beat:
-                        s += 25 if diff == "Hard" else 15
-
-            scores[gi] = s
-    return scores
-
-
-def select_kept_indices(expert: Chart, diff: str) -> Set[int]:
-    """Decimação por janela de 1 beat — top-K por beat, K = round(local * target_ratio)."""
-    notes = sorted(expert.notes, key=lambda n: n.tick)
-    if not notes: return set()
-    tpb = expert.ticks_per_beat
-    target_ratio = predict_target_density(expert, diff)
-    scores = score_expert_notes(expert, diff)
-
-    by_beat: Dict[int, List[int]] = defaultdict(list)
-    for i, n in enumerate(notes):
-        by_beat[n.tick // tpb].append(i)
-
-    cap_per_beat = {"Easy": 1, "Medium": 3, "Hard": 6}[diff]
-    fallback_threshold = {"Easy": 110, "Medium": 90, "Hard": 50}[diff]
-
-    kept: Set[int] = set()
-    for beat, idxs in by_beat.items():
-        local = len(idxs)
-        n_keep = max(0, round(local * target_ratio))
-        n_keep = min(n_keep, cap_per_beat)
-
-        if n_keep == 0 and local >= 1:
-            best = max(idxs, key=lambda i: scores[i])
-            if scores[best] >= fallback_threshold:
-                n_keep = 1
-
-        if n_keep == 0: continue
-        for i in sorted(idxs, key=lambda i: -scores[i])[:n_keep]:
-            kept.add(i)
-    return kept
 
 
 def transpose_chord_shape(expert_frets: Tuple[int, ...], allowed: Tuple[int, ...],
@@ -296,6 +177,161 @@ def compute_window_fret_shift(expert_centroid: float, allowed_max: int, target_o
     return shift
 
 
+def _time_sig_num_denom_at_tick(
+    time_sigs: List[Tuple[int, int, int]], tick: int
+) -> Tuple[int, int]:
+    """(num, denom) do compasso ativo; sem mapa, assume 4/4 (denom=4, semínima com batida)."""
+    if not time_sigs:
+        return 4, 4
+    change_ticks = [s[0] for s in time_sigs]
+    i = bisect.bisect_right(change_ticks, tick) - 1
+    if i < 0:
+        return 4, 4
+    return time_sigs[i][1], time_sigs[i][2]
+
+
+def _eighth_of_measure_ticks(tpb: int, num: int, denom: int) -> int:
+    """
+    Duração de 1/8 de compasso em ticks: `1/8 * (num * (1 batida))`.
+    Batida = denom na partitura: /4=semínima, /8=colcheia, etc. (`tpb` = 1 semínima).
+    """
+    if denom < 1:
+        return max(1, tpb // 2)
+    one_beat_ticks = (tpb * 4) // denom
+    bar_ticks = max(1, num) * one_beat_ticks
+    return max(1, bar_ticks // 8)
+
+
+def _easy_enforce_min_gap_eighth_of_bar(
+    notes: List[Note], tpb: int, time_sigs: List[Tuple[int, int, int]]
+) -> List[Note]:
+    if not notes or tpb < 1:
+        return notes
+    ordered = sorted(notes, key=lambda n: n.tick)
+    out_list: List[Note] = []
+    last_tick: Optional[int] = None
+    for n in ordered:
+        n_num, n_denom = _time_sig_num_denom_at_tick(time_sigs, n.tick)
+        need_gap = _eighth_of_measure_ticks(tpb, n_num, n_denom)
+        if last_tick is not None and (n.tick - last_tick) < need_gap:
+            continue
+        out_list.append(n)
+        last_tick = n.tick
+    return out_list
+
+
+def _chord_shape_ignoring_order(frets: Tuple[int, ...]) -> Tuple[int, ...]:
+    if len(frets) < 2:
+        return ()
+    return tuple(sorted(frets))
+
+
+def _medium_rapid_chord_simplify(
+    notes: List[Note],
+    tpb: int,
+    expert_sorted: List[Note],
+) -> List[Note]:
+    """
+    Só após a redução normal. Dentro de segmentos consecutivos com intervalo
+    **≤ 1/16** da semínima, a partir de `snap` (3+ notas de acorde → 2, extremas):
+    - 3+ notas (Expert) vira par no `snap` antes de comparar formas.
+    - Em alternação muito rápida **entre formas de par diferentes**, cada par
+      vira **uma** nota. Se a forma for **igual** à vizinha, mantém o par (não
+      toca, mesmo toque repetido de acorde).
+    - 2→1: se **alguma** nota do **Expert** no mesmo trecho (ticks do segmento)
+      tiver laranja, mantém o fret **mais alto** (direita); senão o **mais baixo**
+      (esquerda).
+    """
+    if not notes or tpb < 4:
+        return notes
+    max_gap_rapid = max(1, tpb // 4)
+    by_tick = sorted(notes, key=lambda n: n.tick)
+    nlen = len(by_tick)
+
+    def to_double(n: Note) -> Note:
+        if n.is_open or not n.frets or len(n.frets) < 3:
+            return n
+        return Note(
+            n.tick,
+            n.end_tick,
+            (n.frets[0], n.frets[-1]),
+            False,
+            n.forced_hopo,
+            n.is_tap,
+        )
+
+    snap: List[Note] = [to_double(m) for m in by_tick]
+    out: List[Note] = [
+        Note(m.tick, m.end_tick, m.frets, m.is_open, m.forced_hopo, m.is_tap) for m in snap
+    ]
+
+    segments: List[Tuple[int, int]] = []
+    seg0 = 0
+    for idx in range(1, nlen):
+        if snap[idx].tick - snap[idx - 1].tick > max_gap_rapid:
+            segments.append((seg0, idx))
+            seg0 = idx
+    segments.append((seg0, nlen))
+
+    exp_ticks = [n.tick for n in expert_sorted]
+    n_exp = len(expert_sorted)
+
+    def expert_segment_includes_laranja(tick_lo: int, tick_hi: int) -> bool:
+        if not expert_sorted or n_exp == 0:
+            return False
+        i_lo = bisect.bisect_left(exp_ticks, tick_lo)
+        i_hi = bisect.bisect_right(exp_ticks, tick_hi)
+        for eidx in range(i_lo, i_hi):
+            f = expert_sorted[eidx].frets
+            if f and (FRET_LARANJA in f):
+                return True
+        return False
+
+    def is_double_chord(m: Note) -> bool:
+        if m.is_open or not m.frets:
+            return False
+        return len(m.frets) == 2
+
+    def chord_shape2(m: Note) -> Optional[Tuple[int, ...]]:
+        if not is_double_chord(m):
+            return None
+        return _chord_shape_ignoring_order(m.frets)
+
+    for a, bnd in segments:
+        t_lo_rapid = snap[a].tick
+        t_hi_rapid = snap[bnd - 1].tick
+        preserve_direita = expert_segment_includes_laranja(t_lo_rapid, t_hi_rapid)
+
+        for j in range(a, bnd):
+            current = snap[j]
+            s_cur = chord_shape2(current)
+            if s_cur is None:
+                continue
+            s_prev = chord_shape2(snap[j - 1]) if j > a else None
+            s_next = chord_shape2(snap[j + 1]) if j + 1 < bnd else None
+            prev_d = is_double_chord(snap[j - 1]) if j > a else False
+            next_d = is_double_chord(snap[j + 1]) if j + 1 < bnd else False
+            if j > a and prev_d and s_prev is not None and s_cur == s_prev:
+                continue
+            if j + 1 < bnd and next_d and s_next is not None and s_cur == s_next:
+                continue
+            to_single = (prev_d and s_prev is not None and s_prev != s_cur) or (
+                next_d and s_next is not None and s_next != s_cur
+            )
+            if to_single and out[j].frets and len(out[j].frets) == 2:
+                c = out[j]
+                if preserve_direita:
+                    one_f = max(c.frets)
+                else:
+                    one_f = min(c.frets)
+                out[j] = Note(
+                    c.tick, c.end_tick, (one_f,),
+                    False, c.forced_hopo, c.is_tap,
+                )
+
+    return out
+
+
 def reduce_chart(expert: Chart, target_diff: str) -> Chart:
     cfg = DIFF_CONF[target_diff]
     tpb = expert.ticks_per_beat
@@ -303,7 +339,6 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
     pc_mode = classify_power_chord_mode(expert)
     anchors, win = compute_section_anchors(expert)
     notes = sorted(expert.notes, key=lambda n: n.tick)
-    kept_idxs = select_kept_indices(expert, target_diff)
     runs = find_runs(notes, tpb)
     in_burst = [False] * len(notes)
     for run in runs:
@@ -327,7 +362,6 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
 
     out: List[Note] = []
     for i, en in enumerate(notes):
-        if i not in kept_idxs: continue
         sub = sub_beat(en.tick, tpb)
         gap_prev = (en.tick - notes[i-1].tick) if i > 0 else 99999
         gap_next = (notes[i+1].tick - en.tick) if i+1 < len(notes) else 99999
@@ -352,6 +386,12 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
                 n_red = Note(n_red.tick, n_red.tick, n_red.frets, n_red.is_open, n_red.forced_hopo, False)
 
         out.append(n_red)
+
+    if target_diff == "Easy" and out:
+        out = _easy_enforce_min_gap_eighth_of_bar(out, tpb, list(expert.time_sigs))
+
+    if target_diff == "Medium" and out:
+        out = _medium_rapid_chord_simplify(out, tpb, notes)
 
     return Chart(
         instrument=expert.instrument, difficulty=target_diff,

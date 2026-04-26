@@ -45,10 +45,11 @@ def is_paired_kick(en: DrumNote, expert_notes_by_tick: Dict[int, List[DrumNote]]
 
 
 def detect_lane_consolidation(expert: DrumChart) -> Dict[int, int]:
-    """Detecta D-R9: lanes pouco usadas devem ser consolidadas em E/M.
-       Retorna mapping {lane_origem -> lane_destino} para Easy/Medium.
+    """Detecta D-R9: consolidação Blue-tom → Yellow (só aplica no Medium, não no Easy).
 
-       Critérios (qualquer um aciona consolidação Blue → Yellow):
+       Retorna mapping {lane_origem -> lane_destino} para a etapa de toms de Medium.
+
+       Critérios (qualquer um aciona consolidação Blue → Yellow no Medium):
          (a) Blue-tom Expert < 1/3 das Yellow-tom (Blue raro)
          (b) Y-cym Expert é dominante (>50 e >= Blue-tom): a parte rítmica
              principal é hi-hat amarelo, então tudo Blue consolida em Y."""
@@ -61,7 +62,7 @@ def detect_lane_consolidation(expert: DrumChart) -> Dict[int, int]:
     mapping = {}
     blue_rare = b_tom < y_tom / 3
     # Y-cym presente significa que o riff principal usa hi-hat amarelo;
-    # nesses casos, em E/M, Blue-tom tende a consolidar para Yellow.
+    # nesses casos, no Medium, Blue-tom tende a consolidar para Yellow.
     y_cym_active = y_cym > 50
     if blue_rare or y_cym_active:
         mapping[LANE_BLUE] = LANE_YELLOW
@@ -597,9 +598,10 @@ def reduce_drums(expert: DrumChart, target_diff: str) -> DrumChart:
     for src_lane in (LANE_YELLOW, LANE_BLUE, LANE_GREEN):
         tom_notes = by_lane_cym.get((src_lane, False), [])
         if not tom_notes: continue
-        # Consolidação só em E/M
+        # D-R9 (Blue → Yellow em charts hi-hat-dominante): só Medium — no Easy
+        # mantém-se a lane (ex.: tom azul não vira nota amarela).
         dst_lane = src_lane
-        if target_diff in ("Easy", "Medium"):
+        if target_diff == "Medium":
             dst_lane = lane_consol.get(src_lane, src_lane)
         # Selecionar quais manter
         n_keep = max(0, round(len(tom_notes) * target[src_lane]))
