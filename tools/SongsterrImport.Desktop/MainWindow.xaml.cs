@@ -627,6 +627,15 @@ public partial class MainWindow : Window
         _ = RunGenerateDrumChartAsync();
     }
 
+    private void OnOpenCymbalToolClick(object sender, RoutedEventArgs e)
+    {
+        var toolWindow = new CymbalAlternationWindow
+        {
+            Owner = this
+        };
+        toolWindow.ShowDialog();
+    }
+
     private string RepoRoot => RepositoryPaths.ExpandDisplayPath(_repositoryRootDisplay);
     private string Py => DefaultPythonLauncher;
 
