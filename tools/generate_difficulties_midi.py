@@ -33,13 +33,12 @@ def _log(message: str) -> None:
 def _make_backup_path(notes_path: str) -> str:
     parent = os.path.dirname(notes_path)
     base = os.path.splitext(os.path.basename(notes_path))[0]
-    ext = os.path.splitext(notes_path)[1]
     stamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
-    candidate = os.path.join(parent, f"{base}.{stamp}.backup{ext}")
+    candidate = os.path.join(parent, f"{base}.{stamp}.backup")
     if not os.path.exists(candidate):
         return candidate
     suffix = os.urandom(4).hex()
-    return os.path.join(parent, f"{base}.{stamp}.{suffix}.backup{ext}")
+    return os.path.join(parent, f"{base}.{stamp}.{suffix}.backup")
 
 
 def is_harmonix_pack_song(song_dir: str) -> bool:
