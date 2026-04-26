@@ -1,4 +1,4 @@
-﻿<Window x:Class="SongsterrImport.Desktop.MainWindow"
+<Window x:Class="SongsterrImport.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Songsterr Import / Clone Hero"
@@ -464,7 +464,7 @@
                         </Border>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <CheckBox x:Name="ConvertFlamsToDoubleCheck" Content="Convert flams to double note" IsChecked="False" VerticalAlignment="Center" />
+                        <CheckBox x:Name="ExpertCymbalAlternationWholeCheck" Content="Cymbal thinning" IsChecked="False" VerticalAlignment="Center" />
                         <Border
                             Width="18"
                             Height="18"
@@ -478,7 +478,7 @@
                             ToolTipService.ShowDuration="60000"
                             ToolTipService.InitialShowDelay="200">
                             <Border.ToolTip>
-                                <TextBlock TextWrapping="Wrap" MaxWidth="440" Text="When on, the importer uses the project flam window (in code): close same-lane pairs become one musical flam (snare → red + yellow) or a single note on other lanes. When off, every hit stays independent."/>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="480" Text="When on, after building PART DRUMS the import thins Y/B expert cymbals (98/99) only in steady 1/8 runs that also have at least one red snare (97) in that time span. Long runs of only cymbals, or only cymbals with kick and no snare, are not thinned. Fills/irregular spacing break a run. Green (100) is never removed. Tom markers 110/111/112. The separate Cymbal Alternation window is not this rule."/>
                             </Border.ToolTip>
                             <TextBlock
                                 Text="?"

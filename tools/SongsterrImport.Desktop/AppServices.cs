@@ -7,7 +7,7 @@ namespace SongsterrImport.Desktop;
 internal static class AppServices
 {
     private const string IncludeSoftNotesKey = "include_soft_notes";
-    private const string ConvertFlamsKey = "convert_flams_to_double";
+    private const string ExpertCymbalAlternationWholeKey = "expert_cymbal_alternation_whole_chart";
 
     internal static string LastSelectedTrackPathFilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -142,13 +142,13 @@ internal static class AppServices
         WriteBooleanOption(IncludeSoftNotesKey, enabled);
     }
 
-    internal static bool ReadConvertFlamsToDoubleEnabled(bool defaultValue = false)
+    internal static bool ReadExpertCymbalAlternationWholeEnabled(bool defaultValue = false)
     {
-        return ReadBooleanOption(ConvertFlamsKey, defaultValue);
+        return ReadBooleanOption(ExpertCymbalAlternationWholeKey, defaultValue);
     }
 
-    internal static void WriteConvertFlamsToDoubleEnabled(bool enabled)
+    internal static void WriteExpertCymbalAlternationWholeEnabled(bool enabled)
     {
-        WriteBooleanOption(ConvertFlamsKey, enabled);
+        WriteBooleanOption(ExpertCymbalAlternationWholeKey, enabled);
     }
 }

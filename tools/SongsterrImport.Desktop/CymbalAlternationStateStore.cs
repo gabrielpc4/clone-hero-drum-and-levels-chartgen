@@ -78,6 +78,31 @@ internal sealed class CymbalAlternationStateDto
 
     [JsonPropertyName("intervals")]
     public List<CymbalIntervalDto>? Intervals { get; set; }
+
+    /// <summary>Windows OCR: target title + one client rectangle in pixels.</summary>
+    [JsonPropertyName("ocrTarget")]
+    public CymbalOcrStateDto? OcrTarget { get; set; }
+}
+
+internal sealed class CymbalOcrStateDto
+{
+    [JsonPropertyName("targetWindowTitle")]
+    public string? TargetWindowTitle { get; set; }
+
+    [JsonPropertyName("targetProcessName")]
+    public string? TargetProcessName { get; set; }
+
+    [JsonPropertyName("left")]
+    public int Left { get; set; }
+
+    [JsonPropertyName("top")]
+    public int Top { get; set; }
+
+    [JsonPropertyName("width")]
+    public int Width { get; set; }
+
+    [JsonPropertyName("height")]
+    public int Height { get; set; }
 }
 
 internal sealed class CymbalIntervalDto

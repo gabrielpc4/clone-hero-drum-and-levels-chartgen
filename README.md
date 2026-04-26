@@ -81,7 +81,7 @@ Scripts e ferramentas (sync e entrega):
 - `tools/generate_vocals_midi.py` — atualiza `Songs/.../notes.mid` em-place com `PART VOCALS`, cria backup antes e preserva todo o resto da chart
 - `tools/songsterr_workflow.ps1` — encadear *download* + *import* + *sync* no console (não invoca a aplicação WPF)
 - `tools/SongsterrImport.sln` — UI WPF (`SongsterrImport.Desktop`): escolhe pasta em `Songs/`, login Songsterr no WebView2, grava cookies, lança os mesmos `py` e `copy_song_to_clone_hero.ps1` com log; também tem ações por música para `Generate Difficulties` e `Generate Vocals`
-  - Na **raiz do repo**: `Iniciar-Songsterr-Import.bat` (duplo clique: compila e abre; precisa de .NET 8 SDK) e `Criar-Atalho-No-Desktop.bat` (cria `Songsterr Import.lnk` na área de trabalho apontando para o `exe` em `bin\Debug\net8.0-windows\`)
+  - Na **raiz do repo**: `Iniciar-Songsterr-Import.bat` (duplo clique: compila e abre; precisa de .NET 8 SDK) e `Criar-Atalho-No-Desktop.bat` (atalho para o `exe` em `bin\Debug\net8.0-windows10.0.19041.0\`)
 
 `requirements.txt` na raiz: `mido`, `requests`. Variável de ambiente de trabalho: `PYTHONPATH=src;src/chart_generation` (Windows usa `;` no caminho).
 
@@ -114,7 +114,6 @@ Flags ativas hoje:
 python3 src/songsterr_parsing/import_songsterr.py "<songsterr.mid>" "<out.mid>" \
   --ref-path "<notes.chart|notes.mid>" \
   --initial-offset-ticks 768 \
-  --dedup-beats 0.0625 \
   --filter-weak-snares
 ```
 
@@ -122,12 +121,12 @@ Semântica atual das flags:
 
 - `--ref-path`: override explicito da chart de referência
 - `--initial-offset-ticks`: offset global aplicado depois do mapeamento por compassos
-- `--dedup-beats`: janela em beats: se `convert flams` estiver ativo, pares muito
-  perto na mesma lane sao tratados como flam (ver secao 9)
 - `--filter-weak-snares` (opcional): remove caixas com velocity abaixo do padrao
   (ghosts). Sem esta flag, todas as caixas (incluindo soft) entram
-- `--no-convert-flams` (opcional): nao aplica a logica de flam/dedup por
-  proximidade; todos os hits source sao mapeados sem R+Y nem colapso de pares
+- `--expert-cymbal-alternation-whole` (opcional): após montar `PART DRUMS`, aplica
+  a mesma alternância de pratos Expert (Y/B/G) que a ferramenta *Cymbal
+  Alternation*, na **música inteira** (candidatos 98/99/100 fora de trechos
+  de tom; ver secção 9)
 
 Auto-detecção de referência:
 
@@ -376,35 +375,9 @@ Numa alternância maior como:
 o open continua yellow e o closed do meio some. Isso evita transformar esse
 padrão em uma parede azul.
 
-## 9. Flam, dedup e filtros de snare
+## 9. Pratos Expert (Y/B/G), filtros de snare e alternância opcional
 
-### 8.1 Janela de dedup
-
-`--dedup-beats` vale `1/16 beat` por padrão. Só aplica se a lógica de
-conversão de flams estiver ativa; com `--no-convert-flams`, a janela e ignorada
-(isso equivale, no código, a não fundir pares no mesmo corredor).
-
-Para hits na mesma lane dentro dessa janela (com conversão de flam ligada):
-
-- snare -> trata como flam
-- outras lanes -> remove a segunda nota
-
-### 8.2 Flam de snare
-
-Quando duas caixas caem na janela de dedup:
-
-- a primeira caixa vermelha e preservada
-- a segunda vira um yellow tom simultaneo no tick da primeira
-
-Implementacao real:
-
-- `snare_flam_second_to_first` guarda o mapeamento do segundo hit para o tick
-  do primeiro
-- o writer escreve o segundo hit como yellow tom no mesmo tick
-- o primeiro snare e explicitamente removido de `skipped_weak_snares` para que o
-  flam nunca vire "só amarelo"
-
-### 8.3 Filtro de velocity de caixa (ghost / soft)
+### 9.1 Filtro de velocity de caixa (ghost / soft)
 
 `--filter-weak-snares` e opcional.
 
@@ -416,22 +389,19 @@ Comportamento atual:
   apenas a snares
 - outras peças nunca usam esse corte
 
-### 8.4 Weak snare
+### 9.2 Weak snare (com `--filter-weak-snares` ativo)
 
-O descarte de `weak snare` só existe quando `--filter-weak-snares` está
-ativo.
+- duas caixas do **mesmo pitch** dentro de `src_tpb // 8` podem marcar a
+  **primeira** para descarte (ghost)
 
-Se a flag não estiver ativa:
+### 9.3 Alternância de pratos Expert em chart inteiro (`--expert-cymbal-alternation-whole`)
 
-- não existe filtro de weak snare
+A mesma regra que a ferramenta *Cymbal Alternation* (WPF) num único intervalo
+`[0, fim]`: notas 98, 99, 100 (Y/B/G Expert) que **não** caem num intervalo de
+tom indicado por markers 110, 111, 112, ordenadas por tick e nota, depois
+**remove-se metade** (paridade) como no código C#.
 
-Se a flag estiver ativa:
-
-- duas caixas do mesmo pitch dentro de `src_tpb // 8` podem marcar a primeira
-  como fraca
-- esse descarte continua subordinado a logica de flam acima
-
-### 8.5 Note-on com velocity zero
+### 9.4 Note-on com velocity zero
 
 `note_on` com `velocity == 0` sempre e ignorado. Isso evita confundir note-off
 codado como note-on com hit real.
@@ -491,7 +461,7 @@ Validou:
 
 - alternância real de `9/8`, `5/4`, `3/4` e `4/4`
 - mesma leitura correta do offset de `768`
-- correcao global de flam de snare
+- importação sem mapeamento de “flam”/dedup (hit a hit, exceto `weak` se ativo)
 - acoplamento entre weak snare e `--filter-weak-snares`
 - `Hand Clap` ignorado globalmente
 
@@ -617,7 +587,7 @@ No caminho 2:
    isso.
 4. Se mexer em sync:
    - teste pelo menos em `Sugar`, `Soil` e `Question!`
-5. Se mexer em mapeamento/flam/snare:
+5. Se mexer em mapeamento/pratos Expert/snare:
    - teste pelo menos na música ativa
    - regenere e sincronize no final
 6. Não silencie erros estruturais:

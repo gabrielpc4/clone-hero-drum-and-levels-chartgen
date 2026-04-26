@@ -8,7 +8,7 @@
 #   -OutSongsterrMid "Songs\System of a Down - Toxicity\notes.generated.mid"
 #   -SyncSource "C:\caminho\com\notes.generated.ja.escrito" (pasta com notes.generated.mid)
 #   -SyncSongsSub "System of a Down - Toxicity"
-# Parâmetros opcionais: -RefPath, -InitialOffsetTicks, -DedupBeats, -FilterWeakSnares, -NoConvertFlams
+# Parâmetros opcionais: -RefPath, -InitialOffsetTicks, -FilterWeakSnares, -ExpertCymbalAlternationWhole
 
 param(
     [string] $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
@@ -23,9 +23,8 @@ param(
     [string] $OutSongsterrMid,
     [string] $RefPath = "",
     [int] $InitialOffsetTicks = 768,
-    [double] $DedupBeats = 0.0625,
     [switch] $FilterWeakSnares,
-    [switch] $NoConvertFlams,
+    [switch] $ExpertCymbalAlternationWhole,
     [string] $SyncSource = "",
     [string] $SyncSongsSub = ""
 )
@@ -66,8 +65,7 @@ $importArgs = @(
     "-3", $importScript,
     $dlPath,
     $outPath,
-    "--initial-offset-ticks", "$InitialOffsetTicks",
-    "--dedup-beats", "$DedupBeats"
+    "--initial-offset-ticks", "$InitialOffsetTicks"
 )
 if ($RefPath -and $RefPath.Trim() -ne "") {
     $rRef = if ([IO.Path]::IsPathRooted($RefPath)) { $RefPath } else { Join-Path $RepoRoot $RefPath }
@@ -76,8 +74,8 @@ if ($RefPath -and $RefPath.Trim() -ne "") {
 if ($FilterWeakSnares) {
     $importArgs += @("--filter-weak-snares")
 }
-if ($NoConvertFlams) {
-    $importArgs += @("--no-convert-flams")
+if ($ExpertCymbalAlternationWhole) {
+    $importArgs += @("--expert-cymbal-alternation-whole")
 }
 
 Set-Location -LiteralPath $RepoRoot

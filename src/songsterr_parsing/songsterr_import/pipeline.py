@@ -5,7 +5,13 @@ from dataclasses import dataclass
 import mido
 
 from .measure_marker_sync import MeasureMarkerSync, build_measure_marker_tick_mapper
-from .writer import build_output_midi, build_part_drums_track, collect_mapped_drum_events, first_drum_tick
+from .writer import (
+    apply_expert_cymbal_alternation_to_part_drums_track,
+    build_output_midi,
+    build_part_drums_track,
+    collect_mapped_drum_events,
+    first_drum_tick,
+)
 
 
 @dataclass
@@ -20,15 +26,12 @@ def generate_songsterr_drums_synced_to_measure_markers(
     ref_mid: mido.MidiFile,
     initial_offset_seconds: float = 0.0,
     initial_offset_ticks: int = 0,
-    dedup_beats: float = 1 / 16,
     minimum_snare_velocity: int | None = None,
-    convert_flams_to_double_note: bool = True,
+    apply_expert_cymbal_alternation_whole_chart: bool = False,
 ) -> GenerationResult:
     mapped_events = collect_mapped_drum_events(
         src_mid,
-        dedup_beats=dedup_beats,
         minimum_snare_velocity=minimum_snare_velocity,
-        convert_flams_to_double_note=convert_flams_to_double_note,
     )
     tick_mapper, measure_sync = build_measure_marker_tick_mapper(
         src_mid,
@@ -41,6 +44,15 @@ def generate_songsterr_drums_synced_to_measure_markers(
         target_tpb=ref_mid.ticks_per_beat,
         tick_mapper=tick_mapper,
     )
+    if apply_expert_cymbal_alternation_whole_chart:
+        part_drums_track, removed_cymbals = apply_expert_cymbal_alternation_to_part_drums_track(
+            part_drums_track,
+            ref_mid.ticks_per_beat,
+        )
+        print(
+            f"  expert_cymbal 1/8 Y/B thin (G immune, steady runs only): "
+            f"removed={removed_cymbals} note(s)"
+        )
     output_mid = build_output_midi(ref_mid, part_drums_track)
 
     return GenerationResult(

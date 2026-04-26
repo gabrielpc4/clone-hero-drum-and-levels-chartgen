@@ -1,37 +1,40 @@
 @echo off
-chcp 65001 >nul
 setlocal
-title Songsterr Import — compilar e abrir
-cd /d "%~dp0"
-
-set "SLN=%cd%\tools\SongsterrImport.sln"
-set "EXE=%cd%\tools\SongsterrImport.Desktop\bin\Debug\net8.0-windows\SongsterrImport.Desktop.exe"
+set "REPO=%~dp0"
+set "PBASE=%REPO%tools\SongsterrImport.Desktop\bin\Debug"
+set "SLN=%REPO%tools\SongsterrImport.sln"
+set "CSPROJ=%REPO%tools\SongsterrImport.Desktop\SongsterrImport.Desktop.csproj"
+title SongsterrImport
+cd /d "%REPO%"
 
 where dotnet >nul 2>&1
 if errorlevel 1 (
-  echo Não encontrei "dotnet" no PATH. Instale o .NET 8 SDK.
+  echo dotnet not found. Install the .NET 8 SDK. See:
   echo https://dotnet.microsoft.com/download
   pause
   exit /b 1
 )
 
-echo Compilando...
+echo Build...
 dotnet build "%SLN%" -c Debug --nologo -v q
 if errorlevel 1 (
-  echo.
-  echo A compilação falhou.
+  echo Build failed.
   pause
   exit /b 1
 )
 
-if not exist "%EXE%" (
-  echo Exe não encontrado: %EXE%
-  pause
-  exit /b 1
+set "EXE="
+if exist "%PBASE%\net8.0-windows10.0.19041.0\SongsterrImport.Desktop.exe" set "EXE=%PBASE%\net8.0-windows10.0.19041.0\SongsterrImport.Desktop.exe"
+if not defined EXE if exist "%PBASE%\net8.0-windows\SongsterrImport.Desktop.exe" set "EXE=%PBASE%\net8.0-windows\SongsterrImport.Desktop.exe"
+
+if not defined EXE (
+  echo No exe under bin\Debug - launching via dotnet run...
+  start "" /D "%REPO%" dotnet run --no-build -c Debug --project "%CSPROJ%"
+  endlocal
+  exit /b 0
 )
 
-echo Abrindo o aplicativo...
+echo Open app...
 start "" "%EXE%"
-
 endlocal
 exit /b 0

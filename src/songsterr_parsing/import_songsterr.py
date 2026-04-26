@@ -44,25 +44,21 @@ def main() -> None:
         ),
     )
     argument_parser.add_argument(
-        "--dedup-beats",
-        type=float,
-        default=1 / 16,
-        help="pares mesma-lane com gap <= N beats: flam (caixa R+Y) ou dedup (outros) quando a conversao de flams esta ativa.",
-    )
-    argument_parser.add_argument(
         "--filter-weak-snares",
         action="store_true",
         help=f"ignora caixas com velocity abaixo de {DEFAULT_MINIMUM_SNARE_VELOCITY} (ghosts). O padrao e incluir todas (notas 'soft').",
     )
     argument_parser.add_argument(
-        "--no-convert-flams",
+        "--expert-cymbal-alternation-whole",
         action="store_true",
-        help="nao aplica a logica de flam (dois bumbos/duas notas juntinhas) nem dedup por proximidade; cada nota source vira mapeada sem merge.",
+        help=(
+            "apos montar o PART DRUMS, afinar 98/99 em cadeias 1/8 e com caixa 97 nesse arco; "
+            "só prato ou prato+bumbo (sem 97) nao afinar. 100 G imune. Tom 110/111/112; virada quebra cadeia."
+        ),
     )
     args = argument_parser.parse_args()
 
     src_mid = mido.MidiFile(args.src_mid)
-    convert_flams = not args.no_convert_flams
     import_context = resolve_import_context(
         src_mid_path=args.src_mid,
         out_mid_path=args.out_mid,
@@ -84,9 +80,8 @@ def main() -> None:
         src_mid,
         ref_mid,
         initial_offset_ticks=args.initial_offset_ticks,
-        dedup_beats=args.dedup_beats,
         minimum_snare_velocity=snare_filter,
-        convert_flams_to_double_note=convert_flams,
+        apply_expert_cymbal_alternation_whole_chart=args.expert_cymbal_alternation_whole,
     )
     if generation_result.measure_sync is not None:
         print(

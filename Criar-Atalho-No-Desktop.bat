@@ -5,7 +5,7 @@ title Atalho Songsterr Import — área de trabalho
 cd /d "%~dp0"
 
 set "SLN=%cd%\tools\SongsterrImport.sln"
-set "EXE=%cd%\tools\SongsterrImport.Desktop\bin\Debug\net8.0-windows\SongsterrImport.Desktop.exe"
+set "EXE=%cd%\tools\SongsterrImport.Desktop\bin\Debug\net8.0-windows10.0.19041.0\SongsterrImport.Desktop.exe"
 
 where dotnet >nul 2>&1
 if errorlevel 1 (
