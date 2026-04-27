@@ -44,17 +44,17 @@ def main() -> None:
         ),
     )
     argument_parser.add_argument(
-        "--filter-weak-snares",
-        action="store_true",
-        help=f"ignores snares with velocity below {DEFAULT_MINIMUM_SNARE_VELOCITY} (ghosts). The default is to include all (notes 'soft').",
-    )
-    argument_parser.add_argument(
         "--expert-cymbal-alternation-whole",
         action="store_true",
         help=(
             "after building PART DRUMS, fine-tune 98/99 in 1/8 chains with snare 97 in that arc; "
             "cymbals only or cymbals+kick (without 97) do not fine-tune. 100 G immune. Tom 110/111/112; turn break chain."
         ),
+    )
+    argument_parser.add_argument(
+        "--thin-all-cymbal-lines",
+        action="store_true",
+        help="when used with --expert-cymbal-alternation-whole, thin Y/B cymbals in all steady 1/8 runs (not just those with snare activity).",
     )
     args = argument_parser.parse_args()
 
@@ -73,15 +73,13 @@ def main() -> None:
     ref_mid = load_reference_midi(import_context.reference_path)
     print("Diagnostico de sync: alinhamento por markers MEASURE_n")
 
-    snare_filter = (
-        DEFAULT_MINIMUM_SNARE_VELOCITY if args.filter_weak_snares else None
-    )
     generation_result = generate_songsterr_drums_synced_to_measure_markers(
         src_mid,
         ref_mid,
         initial_offset_ticks=args.initial_offset_ticks,
-        minimum_snare_velocity=snare_filter,
+        minimum_snare_velocity=None,
         apply_expert_cymbal_alternation_whole_chart=args.expert_cymbal_alternation_whole,
+        thin_all_cymbal_lines=args.thin_all_cymbal_lines,
     )
     if generation_result.measure_sync is not None:
         print(

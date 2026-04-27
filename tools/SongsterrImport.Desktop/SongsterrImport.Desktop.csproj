@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

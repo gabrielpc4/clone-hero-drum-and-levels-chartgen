@@ -28,6 +28,7 @@ def generate_songsterr_drums_synced_to_measure_markers(
     initial_offset_ticks: int = 0,
     minimum_snare_velocity: int | None = None,
     apply_expert_cymbal_alternation_whole_chart: bool = False,
+    thin_all_cymbal_lines: bool = False,
 ) -> GenerationResult:
     mapped_events = collect_mapped_drum_events(
         src_mid,
@@ -48,6 +49,7 @@ def generate_songsterr_drums_synced_to_measure_markers(
         part_drums_track, removed_cymbals = apply_expert_cymbal_alternation_to_part_drums_track(
             part_drums_track,
             ref_mid.ticks_per_beat,
+            thin_all_cymbal_lines=thin_all_cymbal_lines,
         )
         print(
             f"  expert_cymbal 1/8 Y/B thin (G immune, steady runs only): "

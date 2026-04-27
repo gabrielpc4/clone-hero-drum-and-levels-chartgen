@@ -43,6 +43,8 @@ public partial class MainWindow : Window
     private const string H_Load = "Load Phrase";
     private const string H_More = "More";
     private const string H_Processed = "Processed";
+    private const string H_NotesMidModified = "Drum Chart";
+    private const string H_DifficultiesGenerated = "Difficulties";
     private const string H_End = "End";
     private const string H_5L = "5L";
     private const string H_Pro = "Pro";
@@ -90,12 +92,12 @@ public partial class MainWindow : Window
         string guess = DefaultRepoRootGuess();
         _repositoryRootDisplay = RepositoryPaths.ToDisplayWithEnvironmentPrefix(guess);
         Closing += OnMainWindowClosing;
-        IncludeSoftNotesCheck.IsChecked = AppServices.ReadIncludeSoftNotesEnabled(defaultValue: true);
         ExpertCymbalAlternationWholeCheck.IsChecked = AppServices.ReadExpertCymbalAlternationWholeEnabled(defaultValue: false);
-        IncludeSoftNotesCheck.Checked += OnImportOptionsCheckChanged;
-        IncludeSoftNotesCheck.Unchecked += OnImportOptionsCheckChanged;
+        ThinAllCymbalLinesCheck.IsChecked = AppServices.ReadThinAllCymbalLinesEnabled(defaultValue: false);
         ExpertCymbalAlternationWholeCheck.Checked += OnImportOptionsCheckChanged;
         ExpertCymbalAlternationWholeCheck.Unchecked += OnImportOptionsCheckChanged;
+        ThinAllCymbalLinesCheck.Checked += OnImportOptionsCheckChanged;
+        ThinAllCymbalLinesCheck.Unchecked += OnImportOptionsCheckChanged;
         SongsListView.ItemsSource = _songSource;
         ApplySongFilter();
         LoadSongs();
@@ -133,10 +135,10 @@ public partial class MainWindow : Window
 
     private void PersistImportOptions()
     {
-        bool includeSoftNotes = IncludeSoftNotesCheck.IsChecked == true;
         bool expertCymbalAlt = ExpertCymbalAlternationWholeCheck.IsChecked == true;
-        AppServices.WriteIncludeSoftNotesEnabled(includeSoftNotes);
+        bool thinAllCymbals = ThinAllCymbalLinesCheck.IsChecked == true;
         AppServices.WriteExpertCymbalAlternationWholeEnabled(expertCymbalAlt);
+        AppServices.WriteThinAllCymbalLinesEnabled(thinAllCymbals);
     }
 
     private void LoadSongs()
@@ -166,7 +168,8 @@ public partial class MainWindow : Window
         foreach (string directory in Directory.GetDirectories(customRoot).OrderBy(a => a, StringComparer.OrdinalIgnoreCase))
         {
             string name = Path.GetFileName(directory);
-            bool inSongs = songsDirExists && Directory.Exists(Path.Combine(songsDir, name));
+            string songsFolderPath = Path.Combine(songsDir, name);
+            bool inSongs = songsDirExists && Directory.Exists(songsFolderPath);
             if (inSongs)
             {
                 completeCount++;
@@ -177,7 +180,8 @@ public partial class MainWindow : Window
                     directory,
                     name,
                     RepositoryPaths.ToPathBelowRepository(directory, repoForDisplay),
-                    inSongs ? "Yes" : "No"
+                    inSongs ? "Yes" : "No",
+                    inSongs ? songsFolderPath : null
                 )
             );
         }
@@ -453,6 +457,8 @@ public partial class MainWindow : Window
     private void ResetSongListHeaderBaseTexts()
     {
         SongsHeaderProcessed.Text = H_Processed;
+        SongsHeaderNotesMidModified.Text = H_NotesMidModified;
+        SongsHeaderDifficultiesGenerated.Text = H_DifficultiesGenerated;
         SongsHeaderTitle.Text = H_Title;
         SongsHeaderArtist.Text = H_Artist;
         SongsHeaderAlbum.Text = H_Album;
@@ -496,6 +502,12 @@ public partial class MainWindow : Window
         {
             case nameof(SongEntry.InSongsStatus):
                 SongsHeaderProcessed.Text = H_Processed + arrow;
+                break;
+            case nameof(SongEntry.NotesMidModifiedDisplay):
+                SongsHeaderNotesMidModified.Text = H_NotesMidModified + arrow;
+                break;
+            case nameof(SongEntry.DifficultiesGeneratedDisplay):
+                SongsHeaderDifficultiesGenerated.Text = H_DifficultiesGenerated + arrow;
                 break;
             case nameof(SongEntry.SongIniTitle):
                 SongsHeaderTitle.Text = H_Title + arrow;
@@ -712,14 +724,14 @@ public partial class MainWindow : Window
         }
 
         var list = new List<string> { ImportScript, inputMid, outMid, "--initial-offset-ticks", DefaultInitialOffsetTicks };
-        if (IncludeSoftNotesCheck.IsChecked != true)
-        {
-            list.Add("--filter-weak-snares");
-        }
 
         if (ExpertCymbalAlternationWholeCheck.IsChecked == true)
         {
             list.Add("--expert-cymbal-alternation-whole");
+            if (ThinAllCymbalLinesCheck.IsChecked == true)
+            {
+                list.Add("--thin-all-cymbal-lines");
+            }
         }
 
         string reff = DefaultReferenceChartPath.Trim();
@@ -828,6 +840,7 @@ public partial class MainWindow : Window
 
             if (code == 0)
             {
+                WriteDrumChartSidecar(_syncSongsSubfolderName.Trim());
                 LogProgress.Report(">> Generate Drum Chart completed successfully.");
                 LoadSongs();
             }
@@ -901,6 +914,7 @@ public partial class MainWindow : Window
             );
             if (code == 0)
             {
+                WriteDifficultiesSidecar(_syncSongsSubfolderName.Trim());
                 LogProgress.Report(">> Generate Difficulties completed successfully.");
                 LoadSongs();
             }
@@ -1080,6 +1094,7 @@ public partial class MainWindow : Window
             );
             if (code == 0)
             {
+                WriteAllDifficultiesSidecars(songsDir);
                 LogProgress.Report(">> Generate all difficulties (Songs/) completed successfully.");
                 LoadSongs();
             }
@@ -1095,6 +1110,68 @@ public partial class MainWindow : Window
         finally
         {
             SetBusy(false);
+        }
+    }
+
+    private void WriteDrumChartSidecar(string subfolderName)
+    {
+        if (string.IsNullOrWhiteSpace(subfolderName))
+        {
+            return;
+        }
+
+        string sidecar = Path.Combine(RepoRoot, "Songs", subfolderName, ".drum_chart_ts");
+        try
+        {
+            File.WriteAllText(sidecar, DateTime.Now.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), System.Text.Encoding.UTF8);
+        }
+        catch
+        {
+            // non-critical
+        }
+    }
+
+    private void WriteDifficultiesSidecar(string subfolderName)
+    {
+        if (string.IsNullOrWhiteSpace(subfolderName))
+        {
+            return;
+        }
+
+        string sidecar = Path.Combine(RepoRoot, "Songs", subfolderName, ".difficulties_ts");
+        try
+        {
+            File.WriteAllText(sidecar, DateTime.Now.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), System.Text.Encoding.UTF8);
+        }
+        catch
+        {
+            // non-critical
+        }
+    }
+
+    private void WriteAllDifficultiesSidecars(string songsDir)
+    {
+        if (!Directory.Exists(songsDir))
+        {
+            return;
+        }
+
+        string ts = DateTime.Now.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        foreach (string subdir in Directory.GetDirectories(songsDir))
+        {
+            if (!File.Exists(Path.Combine(subdir, "notes.mid")))
+            {
+                continue;
+            }
+
+            try
+            {
+                File.WriteAllText(Path.Combine(subdir, ".difficulties_ts"), ts, System.Text.Encoding.UTF8);
+            }
+            catch
+            {
+                // non-critical
+            }
         }
     }
 

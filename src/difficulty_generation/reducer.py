@@ -1025,6 +1025,55 @@ def _medium_rapid_chord_simplify(
     return out
 
 
+def _find_expert_alternating_anchor_ticks(
+    expert_sorted: List[Note],
+    tpb: int,
+    min_run: int = 4,
+) -> set:
+    """
+    Detects ticks where Expert plays a 'constant anchor' single note alternating with
+    other single notes (e.g., O R O Y O R O Y — O is the anchor every other beat).
+    Returns the set of anchor ticks so Medium can omit those notes.
+    """
+    singles: List[Note] = [n for n in expert_sorted if not n.is_open and len(n.frets) == 1]
+    n = len(singles)
+    anchor_ticks: set = set()
+    max_step = tpb * 2 + tpb // 4  # max 2 beats between two anchor notes (one note in between)
+
+    i = 0
+    while i < n:
+        anchor_fret = singles[i].frets[0]
+        run_indices = [i]
+        j = i + 2
+        while j < n:
+            between = j - 1
+            if singles[between].frets[0] == anchor_fret:
+                break
+            if singles[j].tick - singles[j - 2].tick > max_step:
+                break
+            if singles[j].frets[0] != anchor_fret:
+                break
+            run_indices.append(j)
+            j += 2
+
+        if len(run_indices) >= min_run:
+            for idx in run_indices:
+                anchor_ticks.add(singles[idx].tick)
+            i = j
+        else:
+            i += 1
+
+    return anchor_ticks
+
+
+def _medium_remove_alternating_anchor_notes(
+    notes: List[Note],
+    anchor_ticks: set,
+) -> List[Note]:
+    """Removes medium notes at ticks where Expert has a constant alternating anchor note."""
+    return [n for n in notes if n.tick not in anchor_ticks]
+
+
 def reduce_chart(expert: Chart, target_diff: str) -> Chart:
     cfg = DIFF_CONF[target_diff]
     tpb = expert.ticks_per_beat
@@ -1107,6 +1156,11 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
     if target_diff == "Easy" and out:
         out = _easy_enforce_min_gap_eighth_of_bar(out, tpb, list(expert.time_sigs))
         out = _easy_snap_to_beat_divisions_of_bar(out, tpb, list(expert.time_sigs))
+
+    if target_diff in ("Medium", "Hard") and out:
+        anchor_ticks = _find_expert_alternating_anchor_ticks(notes, tpb)
+        if anchor_ticks:
+            out = _medium_remove_alternating_anchor_notes(out, anchor_ticks)
 
     if target_diff == "Medium" and out:
         out = _medium_enforce_min_gap_eighth_of_bar(out, tpb, list(expert.time_sigs), notes)

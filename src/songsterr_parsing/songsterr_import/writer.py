@@ -342,6 +342,7 @@ def _cymbal_run_includes_expert_snare_in_span(
 def _yb_cymbals_to_thin_in_run_segment(
     yb_only: list[tuple[int, int]],
     has_virtual_at_start: bool,
+    thin_all_cymbal_lines: bool = False,
 ) -> set[tuple[int, int]]:
     """
     Só 98/99. Bursts de 2+ da *nova* cor: mantém todos, último revira a fase (virtual).
@@ -365,7 +366,8 @@ def _yb_cymbals_to_thin_in_run_segment(
             block_end = yb_index
             while block_end < len(yb_only) and yb_only[block_end][1] == p0:
                 block_end += 1
-            if block_end - yb_index >= 2:
+            max_burst = 3 if thin_all_cymbal_lines else (block_end - yb_index)
+            if 2 <= block_end - yb_index <= max_burst:
                 yb_index = block_end
                 k = 0
                 has_virtual = True
@@ -380,6 +382,7 @@ def _yb_cymbals_to_thin_in_run_segment(
 
 def _yb_cymbals_to_thin_in_steady_musical_eighth_run(
     run_segment: list[tuple[int, int]],
+    thin_all_cymbal_lines: bool = False,
 ) -> set[tuple[int, int]]:
     """
     Pitch 100 (G) é imune, mas ainda pode quebrar/reiniciar a fase:
@@ -412,6 +415,7 @@ def _yb_cymbals_to_thin_in_steady_musical_eighth_run(
         to_remove |= _yb_cymbals_to_thin_in_run_segment(
             current_chunk,
             current_chunk_has_virtual,
+            thin_all_cymbal_lines,
         )
         current_chunk = []
         current_chunk_has_virtual = False
@@ -446,6 +450,7 @@ def _yb_cymbals_to_thin_in_steady_musical_eighth_run(
 def apply_expert_cymbal_alternation_to_part_drums_track(
     part_drums_track: mido.MidiTrack,
     ticks_per_beat: int,
+    thin_all_cymbal_lines: bool = False,
 ) -> tuple[mido.MidiTrack, int]:
     """
     Afinar colcheias Y/B Expert em cadeias estáveis (1/8) na grade musical; 100 (G) imune.
@@ -455,6 +460,7 @@ def apply_expert_cymbal_alternation_to_part_drums_track(
     pratos + bumbo (96) sem 97, não afinar.
     """
     _eighth = _eighth_duration_ticks(ticks_per_beat)
+    _sixteenth = max(1, _eighth // 2)
     snare_ticks = _expert_snare_on_ticks_sorted(part_drums_track)
 
     tom_by_expert: dict[int, list[tuple[int, int]]] = {
@@ -481,16 +487,17 @@ def apply_expert_cymbal_alternation_to_part_drums_track(
         return part_drums_track, 0
 
     candidates.sort(key=lambda item: (item[0], item[1]))
-    run_ranges = _iter_musical_eighth_runs(candidates, _eighth)
     to_remove: set[tuple[int, int]] = set()
-    for st, en in run_ranges:
-        part = [candidates[i] for i in range(st, en + 1)]
-        tick_first, tick_last = part[0][0], part[-1][0]
-        if not _cymbal_run_includes_expert_snare_in_span(
-            tick_first, tick_last, snare_ticks
-        ):
-            continue
-        to_remove |= _yb_cymbals_to_thin_in_steady_musical_eighth_run(part)
+    for step in (_eighth, _sixteenth):
+        run_ranges = _iter_musical_eighth_runs(candidates, step)
+        for st, en in run_ranges:
+            part = [candidates[i] for i in range(st, en + 1)]
+            tick_first, tick_last = part[0][0], part[-1][0]
+            if not thin_all_cymbal_lines and not _cymbal_run_includes_expert_snare_in_span(
+                tick_first, tick_last, snare_ticks
+            ):
+                continue
+            to_remove |= _yb_cymbals_to_thin_in_steady_musical_eighth_run(part, thin_all_cymbal_lines)
 
     if not to_remove:
         return part_drums_track, 0

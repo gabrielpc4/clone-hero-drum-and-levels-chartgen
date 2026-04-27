@@ -36,5 +36,6 @@ if not defined EXE (
 
 echo Open app...
 start "" "%EXE%"
+PAUSE
 endlocal
 exit /b 0
