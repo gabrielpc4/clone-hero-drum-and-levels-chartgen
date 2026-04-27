@@ -55,7 +55,7 @@ class Chart:
 
 @dataclass
 class TempoMap:
-    """Converte ticks MIDI <-> segundos respeitando mudanças de tempo."""
+    """Converts MIDI ticks <-> seconds respecting tempo changes."""
     ticks_per_beat: int
     change_ticks: List[int]
     change_seconds: List[float]

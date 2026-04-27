@@ -56,9 +56,9 @@ TOM_FLAG_PITCHES = {LANE_YELLOW: 110, LANE_BLUE: 111, LANE_GREEN: 112}
 @dataclass
 class DrumNote:
     tick: int
-    # 0=Kick, 1=Snare, 2/3/4 = Y/B/G (Y hi-hat, B ride, G crash em Pro Drums)
+    # 0=Kick, 1=Snare, 2/3/4 = Y/B/G (Y hi-hat, B ride, G crash in Pro Drums)
     lane: int
-    is_cymbal: bool = False  # só Y/B/G (prato vs tom)
+    is_cymbal: bool = False  # only Y/B/G (cymbal vs tom)
     is_2x_kick: bool = False
     velocity: int = 100
 
@@ -155,7 +155,7 @@ def parse_drums(mid: mido.MidiFile) -> Dict[str, DrumChart]:
             ticks_per_beat=tpb,
             overdrive=overdrive,
             drum_fills=drum_fills,
-            cymbal_flags=tom_intervals,  # mantém o nome do campo para compat
+            cymbal_flags=tom_intervals,  # keeps field name for compat
             time_signatures=time_sigs,
         )
         for s, e, p, v in pairs:

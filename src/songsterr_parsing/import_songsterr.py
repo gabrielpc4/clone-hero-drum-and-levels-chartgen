@@ -1,9 +1,9 @@
 """
-Importa um MIDI do Songsterr e gera uma `PART DRUMS` Expert para Clone Hero
-usando, por padrao, o sync por `MEASURE_n` contra os compassos da chart.
+Imports a MIDI from Songsterr and generates a `PART DRUMS` Expert for Clone Hero
+using, by default, sync via `MEASURE_n` against the chart measures.
 
-Uso:
-  python3 import_songsterr.py <externo.mid> <saida.mid>
+Usage:
+  python3 import_songsterr.py <external.mid> <output.mid>
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import mido
 
 _songsterr_parsing_dir = os.path.dirname(os.path.abspath(__file__))
 _chart_generation_dir = os.path.normpath(os.path.join(_songsterr_parsing_dir, "..", "chart_generation"))
-# parse_chart vive em chart_generation; songsterr_import/ em songsterr_parsing.
+# parse_chart lives in chart_generation; songsterr_import/ in songsterr_parsing.
 sys.path.insert(0, _chart_generation_dir)
 sys.path.insert(0, _songsterr_parsing_dir)
 
@@ -28,32 +28,32 @@ from songsterr_import.pipeline import generate_songsterr_drums_synced_to_measure
 
 def main() -> None:
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument("src_mid", help="MIDI externo contendo a bateria")
-    argument_parser.add_argument("out_mid", help="onde gravar o MIDI gerado")
+    argument_parser.add_argument("src_mid", help="External MIDI containing the drums")
+    argument_parser.add_argument("out_mid", help="Where to save the generated MIDI")
     argument_parser.add_argument(
         "--ref-path",
-        help="notes.mid ou notes.chart usado como referencia para os compassos de destino.",
+        help="notes.mid or notes.chart used as reference for the destination measures.",
     )
     argument_parser.add_argument(
         "--initial-offset-ticks",
         type=int,
         default=DEFAULT_INITIAL_OFFSET_TICKS,
         help=(
-            "deslocamento global em ticks/posicoes aplicado depois do mapeamento "
-            f"compasso-a-compasso por MEASURE_n (padrao: {DEFAULT_INITIAL_OFFSET_TICKS})."
+            "global offset in ticks/positions applied after the mapping "
+            f"measure-by-measure via MEASURE_n (default: {DEFAULT_INITIAL_OFFSET_TICKS})."
         ),
     )
     argument_parser.add_argument(
         "--filter-weak-snares",
         action="store_true",
-        help=f"ignora caixas com velocity abaixo de {DEFAULT_MINIMUM_SNARE_VELOCITY} (ghosts). O padrao e incluir todas (notas 'soft').",
+        help=f"ignores snares with velocity below {DEFAULT_MINIMUM_SNARE_VELOCITY} (ghosts). The default is to include all (notes 'soft').",
     )
     argument_parser.add_argument(
         "--expert-cymbal-alternation-whole",
         action="store_true",
         help=(
-            "apos montar o PART DRUMS, afinar 98/99 em cadeias 1/8 e com caixa 97 nesse arco; "
-            "só prato ou prato+bumbo (sem 97) nao afinar. 100 G imune. Tom 110/111/112; virada quebra cadeia."
+            "after building PART DRUMS, fine-tune 98/99 in 1/8 chains with snare 97 in that arc; "
+            "cymbals only or cymbals+kick (without 97) do not fine-tune. 100 G immune. Tom 110/111/112; turn break chain."
         ),
     )
     args = argument_parser.parse_args()

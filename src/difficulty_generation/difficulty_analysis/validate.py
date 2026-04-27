@@ -1,9 +1,9 @@
 """
-Validação detalhada: gera reduções e mede:
-  - precision/recall de ticks
-  - fret-set exatamente igual quando ticks coincidem
-  - similaridade de fret-centroid (R14)
-  - distribuição (E_size, R_size) gerada vs oficial
+Detailed validation: generates reductions and measures:
+  - tick precision/recall
+  - fret-set exactly equal when ticks match
+  - fret-centroid similarity (R14)
+  - distribution (E_size, R_size) generated vs official
 """
 import os, sys, glob, mido
 from collections import Counter

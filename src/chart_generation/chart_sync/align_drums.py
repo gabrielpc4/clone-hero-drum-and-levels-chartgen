@@ -78,7 +78,7 @@ def kick_decimation(charts):
                 kept_subs[(beat_in_bar, sub)] += 1
             else:
                 dropped_subs[(beat_in_bar, sub)] += 1
-        # Conta também: kick paired com outra hit (snare ou tom) no mesmo tick
+        # Also count: kick paired with another hit (snare or tom) at the same tick
         expert_other_at_tick = defaultdict(set)
         for n in charts["Expert"].notes:
             if n.lane != LANE_KICK:
@@ -105,8 +105,8 @@ def kick_decimation(charts):
 
 
 def kick_2x_reduction(charts, mid):
-    """Q4: 2x kick (pitch 95) é só Expert. Como E/M/H tratam esses ticks?
-       (Verifica se o Expert kick adicional vira kick simples ou some.)"""
+    """Q4: 2x kick (pitch 95) is Expert only. How do E/M/H handle these ticks?
+       (Checks if the Expert additional kick becomes simple kick or disappears.)"""
     track = next(t for t in mid.tracks if t.name == "PART DRUMS")
     abs_t = 0
     kick_2x_ticks = []
@@ -117,7 +117,7 @@ def kick_2x_reduction(charts, mid):
     out = dict(total_2x_kicks=len(kick_2x_ticks))
     if not kick_2x_ticks:
         return out
-    # Para cada 2x kick, ver se essa posição também tem kick na Hard/Medium/Easy
+    # For each 2x kick, check if that position also has kick in Hard/Medium/Easy
     for diff in ("Easy", "Medium", "Hard"):
         diff_kick_ticks = {n.tick for n in charts[diff].notes if n.lane == LANE_KICK}
         out[f"{diff}_kept"] = sum(1 for t in kick_2x_ticks if t in diff_kick_ticks)

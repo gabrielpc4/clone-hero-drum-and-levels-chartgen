@@ -1,14 +1,14 @@
-# Sequência no README: baixar MIDI, import, sync (não chama o app WPF).
-# Uso (na raiz do repositório):
+# Sequence in README: download MIDI, import, sync (does not call the WPF app).
+# Usage (in the repository root):
 #   powershell -ExecutionPolicy Bypass -File tools/songsterr_workflow.ps1
 #   -RepoRoot $PWD
 #   -CookieFile "$env:LOCALAPPDATA\SongsterrImport\cookies.json"
 #   -SongsterrUrl "https://www.songsterr.com/a/wsa/...-s21961"
 #   -DownloadTo "Songs\System of a Down - Toxicity\songsterr_in.mid"
 #   -OutSongsterrMid "Songs\System of a Down - Toxicity\notes.generated.mid"
-#   -SyncSource "C:\caminho\com\notes.generated.ja.escrito" (pasta com notes.generated.mid)
+#   -SyncSource "C:\path\with\notes.generated.already.written" (folder with notes.generated.mid)
 #   -SyncSongsSub "System of a Down - Toxicity"
-# Parâmetros opcionais: -RefPath, -InitialOffsetTicks, -FilterWeakSnares, -ExpertCymbalAlternationWhole
+# Optional parameters: -RefPath, -InitialOffsetTicks, -FilterWeakSnares, -ExpertCymbalAlternationWhole
 
 param(
     [string] $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
@@ -33,7 +33,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 $env:PYTHONPATH = "src;src\chart_generation"
 
-# Resolve-Path pode falhar se ainda não existir: criar diretório pai
+# Resolve-Path may fail if it does not exist yet: create parent directory
 function Ensure-ParentDir {
     param([string] $FilePath)
     $dir = Split-Path -Parent $FilePath
@@ -45,7 +45,7 @@ $importScript = Join-Path $RepoRoot "src\songsterr_parsing\import_songsterr.py"
 $syncScript = Join-Path $RepoRoot "copy_song_to_clone_hero.ps1"
 
 if (-not (Test-Path -LiteralPath $downloadScript)) {
-    throw "Não encontrado: $downloadScript"
+    throw "Not found: $downloadScript"
 }
 
 $cookiePath = (Resolve-Path -LiteralPath $CookieFile).Path
@@ -59,7 +59,7 @@ $outPath = [IO.Path]::GetFullPath($outPath)
 Write-Host "== 1) Download MIDI Songsterr ==" -ForegroundColor Cyan
 $downloadArgs = @("-3", $downloadScript, $SongsterrUrl, $dlPath, "--cookie-file", $cookiePath)
 & $Python @downloadArgs
-if ($LASTEXITCODE -ne 0) { throw "download_songsterr_midi.py falhou com código $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "download_songsterr_midi.py failed with exit code $LASTEXITCODE" }
 
 $importArgs = @(
     "-3", $importScript,
@@ -81,7 +81,7 @@ if ($ExpertCymbalAlternationWhole) {
 Set-Location -LiteralPath $RepoRoot
 Write-Host "== 2) import_songsterr ==" -ForegroundColor Cyan
 & $Python @importArgs
-if ($LASTEXITCODE -ne 0) { throw "import_songsterr.py falhou com código $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "import_songsterr.py failed with exit code $LASTEXITCODE" }
 
 if ($SyncSource -and $SyncSongsSub) {
     Write-Host "== 3) copy_song_to_clone_hero.ps1 ==" -ForegroundColor Cyan
@@ -89,7 +89,7 @@ if ($SyncSource -and $SyncSongsSub) {
     if ($LASTEXITCODE -ne 0) { throw "copy_song_to_clone_hero.ps1 falhou" }
 }
 else {
-    Write-Host "(sem sync) use -SyncSource e -SyncSongsSub para copiar com copy_song_to_clone_hero.ps1" -ForegroundColor Yellow
+    Write-Host "(without sync) use -SyncSource and -SyncSongsSub to copy with copy_song_to_clone_hero.ps1" -ForegroundColor Yellow
 }
 
-Write-Host "Concluído." -ForegroundColor Green
+Write-Host "Completed." -ForegroundColor Green

@@ -9,7 +9,7 @@ DefaultColors.ini
 Moonscraper/
 
 
-# Áudio (não vai pro Git — pesado e potencialmente sob copyright)
+# Audio (not going to Git — heavy and potentially under copyright)
 *.opus
 *.ogg
 *.wav
@@ -21,10 +21,10 @@ Moonscraper/
 *.webm
 
 
-# Arquivos zip de custom songs (pesados, ficam fora do Git)
+# Zip files of custom songs (heavy, stay out of Git)
 *.zip
 
-# Cache de transcodificação opus → ogg (regenerável)
+# Transcoding cache opus → ogg (regenerable)
 _cache_ogg/
 
 # macOS
@@ -50,15 +50,15 @@ tools/SongsterrImport.Desktop/node_modules/
 tools/SongsterrImport.Desktop/bin/
 tools/SongsterrImport.Desktop/obj/
 
-# Editores
+# Editors
 .cursor/
 .vscode/
 .idea/
 *.swp
 *~
 
-# Backup do parser/análise (geralmente intermediário, regenerável)
+# Parser/analysis backup (usually intermediate, regenerable)
 src/__pycache__/
 
-# Cópias de segurança de MIDI (extensão sem .mid — conteúdo ainda é MIDI)
+# MIDI backups (extension without .mid — content still is MIDI)
 *.backup
