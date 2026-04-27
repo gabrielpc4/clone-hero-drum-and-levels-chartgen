@@ -1,9 +1,9 @@
 """
-Sub-investigações:
-A) Notas órfãs (existem em E/M/H mas não no Expert) — entender quem/porquê.
-B) Transposições "fora do acorde" — qual fret Expert vira qual fret reduzido?
-C) Bursts rápidos: como Harmonix decima sequências de 16ths/32ths no Expert?
-D) Anchor de fret: a sequência reduzida tende a ficar num só fret?
+Sub-investigations:
+A) Orphan notes (exist in E/M/H but not in Expert) — understand who/why.
+B) "Out-of-chord" transpositions — which Expert fret becomes which reduced fret?
+C) Fast bursts: how does Harmonix decimate 16th/32nd sequences in Expert?
+D) Fret anchor: does the reduced sequence tend to stay on a single fret?
 """
 from __future__ import annotations
 import os, glob, mido
@@ -13,7 +13,7 @@ from parse_chart import parse_part, FRET_NAMES
 
 
 def investigate_orphans(charts):
-    """A — listar e contextualizar órfãs por dificuldade."""
+    """A — list and contextualize orphans per difficulty."""
     expert_ticks = {n.tick for n in charts["Expert"].notes}
     expert_by_tick = {n.tick: n for n in charts["Expert"].notes}
     out = {}
@@ -22,7 +22,7 @@ def investigate_orphans(charts):
         orphans = []
         for tick, rn in diff_by_tick.items():
             if tick in expert_ticks: continue
-            # Pega o tick Expert mais próximo
+            # Get the closest Expert tick
             before = max((t for t in expert_ticks if t < tick), default=None)
             after = min((t for t in expert_ticks if t > tick), default=None)
             orphans.append(dict(
@@ -38,7 +38,7 @@ def investigate_orphans(charts):
 
 
 def investigate_transposition(charts):
-    """B — para cada acorde Expert que virou single 'transposed_outside', qual o mapeamento real?"""
+    """B — for each Expert chord that became single 'transposed_outside', what is the real mapping?"""
     expert_by_tick = {n.tick: n for n in charts["Expert"].notes}
     out = {}
     for diff in ("Easy", "Medium", "Hard"):

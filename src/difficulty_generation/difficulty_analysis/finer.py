@@ -1,23 +1,23 @@
 """
-Investigações finais da Etapa 2:
+Final investigations of Stage 2:
 
-E) HOPO/Tap propagação:
-   - Force-HOPO ON/OFF (pitches +5/+6 sobre a base) — aparecem nas 4 dificuldades?
-   - Tap (pitch 104) — preservado nas reduções?
+E) HOPO/Tap propagation:
+   - Force-HOPO ON/OFF (pitches +5/+6 relative to base) — appear in all 4 difficulties?
+   - Tap (pitch 104) — preserved in reductions?
 
-F) Anchor-de-seção:
-   - Particionar a música em janelas (4 beats / 1 compasso?) e ver, dentro de cada janela,
-     qual o "centro de gravidade" do fret no Expert vs nas reduções.
-   - Hipótese: a Harmonix mantém o centro/região do braço, só amaciando o spread.
+F) Anchor-per-section:
+   - Partition the song into windows (4 beats / 1 measure?) and see, within each window,
+     what the "center of gravity" of the fret is in Expert vs reductions.
+   - Hypothesis: Harmonix keeps the center/region of the neck, just softening the spread.
 
-G) Drop vs single em Easy/Medium:
-   - Para acordes Expert que não foram preservados, o que decide entre virar single ou sumir?
-   - Variáveis candidatas: posição no beat, duração, vizinhança (isolada ou em run),
-     densidade local, dentro de SP, em transição entre acordes diferentes.
+G) Drop vs single in Easy/Medium:
+   - For Expert chords that were not preserved, what decides between becoming single or disappearing?
+   - Candidate variables: position in beat, duration, neighborhood (isolated or in run),
+     local density, within SP, in transition between different chords.
 
-H) Modo de sustain (R11):
-   - Computar uma métrica por música que separe Aerials/Chop Suey/Hypnotize/BYOB (preserva)
-     de Spiders/Toxicity (converte).
+H) Sustain mode (R11):
+   - Compute a per-song metric that separates Aerials/Chop Suey/Hypnotize/BYOB (preserves)
+     from Spiders/Toxicity (converts).
 """
 from __future__ import annotations
 import os, glob, mido

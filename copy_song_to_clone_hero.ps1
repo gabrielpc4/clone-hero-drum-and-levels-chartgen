@@ -1,8 +1,8 @@
-# Copia os arquivos de uma pasta de musica para Songs/ no Clone Hero.
-# Uso: .\copy_song_to_clone_hero.ps1 <pasta-origem> <destino-sob-Songs>
-# Ex.: .\copy_song_to_clone_hero.ps1 "C:\repo\original\custom\SoD" "System of a Down - Soil"
-# Exige notes.generated.mid na origem; grava notes.mid em Songs/<destino>/ e copia o resto
-# (exceto *.mid e *.chart) da origem.
+# Copies files from a music folder to Songs/ in Clone Hero.
+# Usage: .\copy_song_to_clone_hero.ps1 <source-folder> <destination-under-Songs>
+# Example: .\copy_song_to_clone_hero.ps1 "C:\repo\original\custom\SoD" "System of a Down - Soil"
+# Requires notes.generated.mid in source; writes notes.mid to Songs/<destination>/ and copies the rest
+# (except *.mid and *.chart) from source.
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
@@ -105,7 +105,7 @@ function Ensure-OggAudioInDestination {
 
     $sourceAudioPath = Get-PreferredAudioSourcePath -FolderPath $SourceFolderPath
     if ([string]::IsNullOrWhiteSpace($sourceAudioPath)) {
-        throw "Nenhum arquivo de audio suportado foi encontrado na origem para gerar song.ogg."
+        throw "No supported audio file was found in the source to generate song.ogg."
     }
 
     $destinationOggPath = Join-Path $DestinationFolderPath "song.ogg"
@@ -116,7 +116,7 @@ function Ensure-OggAudioInDestination {
 
     $ffmpegExecutablePath = Resolve-FfmpegExecutablePath -RepositoryRootPath $RepositoryRootPath
     if ([string]::IsNullOrWhiteSpace($ffmpegExecutablePath)) {
-        throw "ffmpeg nao encontrado. Coloque em tools\\ffmpeg\\bin\\ffmpeg.exe ou configure no PATH."
+        throw "ffmpeg not found. Place it in tools\\ffmpeg\\bin\\ffmpeg.exe or configure it in PATH."
     }
 
     $cacheRoot = Join-Path $RepositoryRootPath "_cache_ogg"
@@ -136,7 +136,7 @@ function Ensure-OggAudioInDestination {
         )
         & $ffmpegExecutablePath @arguments | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            throw "ffmpeg falhou ao converter '$sourceAudioPath' para ogg (exit $LASTEXITCODE)."
+            throw "ffmpeg failed to convert '$sourceAudioPath' to ogg (exit $LASTEXITCODE)."
         }
     }
 
@@ -144,18 +144,18 @@ function Ensure-OggAudioInDestination {
 }
 
 if ($SourcePath -in @("-h", "--help", "")) {
-    Write-Error "Uso: copy_song_to_clone_hero.ps1 <pasta-origem> <destino-sob-Songs>"
+    Write-Error "Usage: copy_song_to_clone_hero.ps1 <source-folder> <destination-under-Songs>"
     exit 1
 }
 
 $repoDir = $PSScriptRoot
 if (-not (Test-Path -LiteralPath $repoDir -PathType Container)) {
-    throw "Diretório do script inválido: $repoDir"
+    throw "Invalid script directory: $repoDir"
 }
 
 $sourceDir = Resolve-Path -LiteralPath $SourcePath
 if (-not (Test-Path -LiteralPath $sourceDir -PathType Container)) {
-    Write-Error "A origem não é uma pasta ou não existe: $SourcePath"
+    Write-Error "The source is not a folder or does not exist: $SourcePath"
     exit 1
 }
 
@@ -171,12 +171,12 @@ else {
 }
 
 if ([string]::IsNullOrWhiteSpace($songRelPath) -or $songRelPath -eq "." -or $songRelPath -eq "..") {
-    Write-Error "Destino inválido: indique a pasta da música sob Songs/ (ex.: 'System of a Down - Soil'). Recebido: '$SongsSubPath'"
+    Write-Error "Invalid destination: specify the music folder under Songs/ (e.g., 'System of a Down - Soil'). Received: '$SongsSubPath'"
     exit 1
 }
 
 if ($songRelPath -like "*`..*") {
-    Write-Error "'..' não é permitido no destino. Use só o caminho desejado em Songs/."
+    Write-Error "'..' is not allowed in destination. Use only the desired path in Songs/."
     exit 1
 }
 
@@ -185,7 +185,7 @@ $null = New-Item -ItemType Directory -Path $destSongDir -Force
 
 $songsterrMid = Join-Path $sourceDir "notes.generated.mid"
 if (-not (Test-Path -LiteralPath $songsterrMid -PathType Leaf)) {
-    Write-Error "Falta notes.generated.mid em: $sourceDir"
+    Write-Error "Missing notes.generated.mid in: $sourceDir"
     exit 1
 }
 

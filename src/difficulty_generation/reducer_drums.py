@@ -1,16 +1,16 @@
 """
-Gerador de chart drums Easy/Medium/Hard a partir do Expert (PART DRUMS).
+Generator for Easy/Medium/Hard drum charts from Expert (PART DRUMS).
 
-Implementa as regras D-R1 a D-R12 documentadas em §14 do HANDOFF.md.
+Implements rules D-R1 to D-R12 documented in §14 of HANDOFF.md.
 
 Pipeline:
-  1. Para cada nota Expert (kick / snare / Y / B / G, com is_cymbal):
-     - Decidir se mantém esse tick na dificuldade alvo
-     - Aplicar conversão de lane (D-R1, D-R1.1, D-R9, D-R11)
-     - Aplicar regra D-R3 (Easy sem bumbo; Medium: kick paired)
-  2. 2x kick (pitch 95): drop sempre (D-R7)
-  3. Markers 110/111/112: preservar mas só consultados em Hard/Expert
-  4. Drum fills 120-124: preservar
+  1. For each Expert note (kick / snare / Y / B / G, with is_cymbal):
+     - Decide whether to keep that tick in the target difficulty
+     - Apply lane conversion (D-R1, D-R1.1, D-R9, D-R11)
+     - Apply rule D-R3 (Easy without kick; Medium: kick paired)
+  2. 2x kick (pitch 95): always drop (D-R7)
+  3. Markers 110/111/112: preserve but only consulted in Hard/Expert
+  4. Drum fills 120-124: preserve
 """
 from __future__ import annotations
 import os, sys
@@ -158,9 +158,9 @@ def _is_kick_on_quarter_beat_in_bar(
     tick: int, tpb: int, time_sigs: List[Tuple[int, int, int]]
 ) -> bool:
     """
-    Kick alinhado a um tempo de semínima dentro do compasso (tempos 1..N
-    consoante o numerador/TS), não só ao 1.º. Equivale a: posição no compasso
-    a partir de `time_sigs` tem offset múltiplo de `tpb` (1 semínima).
+    Kick aligned to a quarter beat within the measure (beats 1..N
+    according to numerator/TS), not just the 1st. Equivalent to: position in bar
+    from `time_sigs` has offset multiple of `tpb` (1 quarter).
     """
     sig_start, num, den = _active_time_signature_at(tick, time_sigs)
     mlen = _measure_len_ticks(num, den, tpb)
@@ -172,7 +172,7 @@ def _is_kick_on_downbeat_in_bar(
     tick: int, tpb: int, time_sigs: List[Tuple[int, int, int]]
 ) -> bool:
     """
-    1.º tempo / nota mais forte do compasso (início de compasso no TS do MIDI).
+    1st beat / strongest note of the measure (start of measure in MIDI TS).
     """
     sig_start, num, den = _active_time_signature_at(tick, time_sigs)
     mlen = _measure_len_ticks(num, den, tpb)

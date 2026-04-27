@@ -1,11 +1,11 @@
 """
-Reparos mínimos para ficheiros MIDI padrão (MThd + MTrk) que o mido recusa, ex.:
+Minimal repairs for standard MIDI files (MThd + MTrk) that mido refuses, e.g.:
 
-- Cabeçalho MThd: `ntracks` maior do que o nº de blocos `MTrk` (bytes restantes
-  corpo de pista *sem* os 8 bytes de cabeçalho) — envolve em `MTrk`+length.
-- Após a última pista declarada, ainda existem bytes (cabeçalho certo) —
-  funde no tamanho da última pista e alinha `ntracks` com o nº de `MTrk` lidos
-  (caso 6 MThd, 5 blocos, lixo a seguir; ou 5/5 e última subdeclarada).
+- MThd header: `ntracks` larger than the number of `MTrk` blocks (remaining bytes
+  track body *without* the 8-byte header) — wraps in `MTrk`+length.
+- After the last declared track, there are still bytes (correct header) —
+  merges into the last track size and aligns `ntracks` with the number of `MTrk` read
+  (case 6 MThd, 5 blocks, garbage after; or 5/5 and last under-declared).
 """
 from __future__ import annotations
 import io
@@ -19,9 +19,9 @@ _MAX_TRAILING_CHUNK = 1_000_000
 
 def _mtrk_scan(data: bytes) -> Tuple[List[Tuple[int, int]], int]:
     """
-    Lista de (offset MTrk, tamanho do corpo) e offset do 1.º byte que *não*
-    continua a sequência de chunks MTrk, ou `len(data)` se o ficheiro fica
-    alinhado sem bytes extra.
+    List of (MTrk offset, body size) and offset of the 1st byte that *doesn't*
+    continue the MTrk chunk sequence, or `len(data)` if the file is
+    aligned without extra bytes.
     """
     if len(data) < 14 or data[0:4] != b"MThd":
         return [], 0
@@ -42,10 +42,10 @@ def _mtrk_scan(data: bytes) -> Tuple[List[Tuple[int, int]], int]:
 
 def _repair_fewer_mtrk_merge_orphan_onto_last(data: bytes) -> bytes:
     """
-    Quando o MThd anuncia mais pistas do que o nº de cabeçalhos MTrk no
-    ficheiro, a maioria destes ficheiros é: última pista subdeclarada; o resto
-    do ficheiro (corpo) pertence a essa pista, não a uma pista com cabeçalho
-    em falta. Funde no último MTrk e ajusta `ntracks` = nº de pistas reais.
+    When MThd announces more tracks than the number of MTrk headers in the
+    file, most of these files are: last track under-declared; the rest
+    of the file (body) belongs to that track, not to a track with a missing header.
+    Merges into the last MTrk and adjusts `ntracks` = number of real tracks.
     """
     if len(data) < 14 or data[0:4] != b"MThd":
         return data
@@ -68,9 +68,9 @@ def _repair_fewer_mtrk_merge_orphan_onto_last(data: bytes) -> bytes:
 
 def repair_type1_midi_bytes(data: bytes) -> bytes:
     """
-    Outros casos: bloco MTrk em falta (bytes a seguir sem \"MTrk\");
-    ou última pista subdeclarada com `num_tracks` já igual ao nº de pistas;
-    ou correção de `num_tracks` com ficheiro coerente.
+    Other cases: missing MTrk block (bytes after without \"MTrk\");
+    or last track under-declared with `num_tracks` already equal to number of tracks;
+    or correction of `num_tracks` with coherent file.
     """
     if len(data) < 14 or data[0:4] != b"MThd" or data[4:8] == b"":
         return data

@@ -1,8 +1,8 @@
 """
-Alinhamento Expert↔Hard↔Medium↔Easy de PART GUITAR para todas as 6 músicas.
+Alignment of Expert↔Hard↔Medium↔Easy for PART GUITAR across all 6 songs.
 
-Para cada tick onde o Expert tem nota, registra (E, M, H, X) — cada um sendo
-None ou um Note. Depois cruzamos para responder:
+For each tick where Expert has a note, records (E, M, H, X) — each being
+None or a Note. Then we cross-reference to answer:
 
   Q1. Toda nota em E/M/H está em algum tick do Expert?
   Q2. Densidade real (nota mantida vs descartada) por beat-position e por seção.
@@ -21,7 +21,7 @@ from parse_chart import parse_part, Note, Chart, FRET_NAMES, DIFF_BASE
 
 
 def build_alignment(charts: Dict[str, Chart]):
-    """Devolve list aligned: cada item = {tick, E, M, H, X} para todo tick presente em qualquer dificuldade."""
+    """Returns aligned list: each item = {tick, E, M, H, X} for every tick present in any difficulty."""
     by_tick: Dict[int, Dict[str, Optional[Note]]] = defaultdict(lambda: {"Easy": None, "Medium": None, "Hard": None, "Expert": None})
     for diff, c in charts.items():
         for n in c.notes:
@@ -30,7 +30,7 @@ def build_alignment(charts: Dict[str, Chart]):
 
 
 def temporal_subset_check(charts: Dict[str, Chart]):
-    """Q1: cada tick em E/M/H aparece em Expert?"""
+    """Q1: does each tick in E/M/H appear in Expert?"""
     expert_ticks = {n.tick for n in charts["Expert"].notes}
     out = {}
     for diff in ("Easy", "Medium", "Hard"):
@@ -46,16 +46,16 @@ def temporal_subset_check(charts: Dict[str, Chart]):
 
 
 def chord_reduction_stats(charts: Dict[str, Chart]):
-    """Q3: quando Expert é acorde de N notas, o que aparece nas reduções?"""
+    """Q3: when Expert is a chord of N notes, what appears in the reductions?"""
     expert_by_tick = {n.tick: n for n in charts["Expert"].notes}
     stats: Dict[str, Dict] = {}
     for diff in ("Easy", "Medium", "Hard"):
         diff_by_tick = {n.tick: n for n in charts[diff].notes}
-        # Para cada tick onde Expert tem >= 2 notas E a redução também tem nota
-        kept_count = Counter()        # qual posição do acorde foi mantida (lowest=0, mid=1, highest=last)
-        kept_fret = Counter()         # quais frets concretos sobreviveram
+        # For each tick where Expert has >= 2 notes AND the reduction also has a note
+        kept_count = Counter()        # which chord position was kept (lowest=0, mid=1, highest=last)
+        kept_fret = Counter()         # which concrete frets survived
         size_change = Counter()       # (size_expert, size_reduced)
-        # Para acordes onde a redução também é acorde
+        # For chords where the reduction is also a chord
         intersection_pattern = Counter()
         for tick, en in expert_by_tick.items():
             if len(en.frets) < 2:
@@ -65,7 +65,7 @@ def chord_reduction_stats(charts: Dict[str, Chart]):
                 size_change[(len(en.frets), 0)] += 1
                 continue
             size_change[(len(en.frets), len(rn.frets))] += 1
-            # Quando sobra exatamente uma nota: posição relativa
+            # When exactly one note remains: relative position
             if len(rn.frets) == 1:
                 rfret = rn.frets[0]
                 if rfret in en.frets:
@@ -81,7 +81,7 @@ def chord_reduction_stats(charts: Dict[str, Chart]):
                     kept_count["transposed_outside"] += 1
                     kept_fret[FRET_NAMES[rfret] + "*"] += 1
             elif len(rn.frets) >= 2:
-                # tipo de interseção
+                # type of intersection
                 inter = set(en.frets) & set(rn.frets)
                 pattern = f"E{len(en.frets)}→R{len(rn.frets)} inter={len(inter)}"
                 intersection_pattern[pattern] += 1
@@ -95,7 +95,7 @@ def chord_reduction_stats(charts: Dict[str, Chart]):
 
 
 def fret_transposition_stats(charts: Dict[str, Chart]):
-    """Q3b: para notas SINGLE no Expert que sobreviveram (também single), qual a matriz Expert→reduced?"""
+    """Q3b: for SINGLE notes in Expert that survived (also single), what is the Expert→reduced matrix?"""
     expert_by_tick = {n.tick: n for n in charts["Expert"].notes}
     out: Dict[str, Dict] = {}
     for diff in ("Easy", "Medium", "Hard"):
@@ -113,8 +113,8 @@ def fret_transposition_stats(charts: Dict[str, Chart]):
 
 
 def density_by_beat_position(charts: Dict[str, Chart]):
-    """Q2: dividindo o tempo em sub-beat (16ths = TPB/4), qual a chance de uma nota Expert sobreviver
-       em cada offset dentro do beat?"""
+    """Q2: dividing time into sub-beat (16ths = TPB/4), what is the chance of an Expert note surviving
+       at each offset within the beat?"""
     tpb = charts["Expert"].ticks_per_beat
     sub = tpb // 4  # 16th note
     expert_by_tick = {n.tick: n for n in charts["Expert"].notes}
@@ -124,7 +124,7 @@ def density_by_beat_position(charts: Dict[str, Chart]):
         bucket_total = Counter()
         bucket_kept = Counter()
         for tick in expert_by_tick:
-            offset = (tick % tpb) // sub  # 0=on-beat, 1=&, 2=mid, 3=ah... aproximado
+            offset = (tick % tpb) // sub  # 0=on-beat, 1=&, 2=mid, 3=ah... approximate
             bucket_total[offset] += 1
             if tick in diff_ticks:
                 bucket_kept[offset] += 1
@@ -135,10 +135,10 @@ def density_by_beat_position(charts: Dict[str, Chart]):
 
 
 def sustain_threshold_stats(charts: Dict[str, Chart]):
-    """Q4: distribuição de durações (em ticks) das notas Expert, separadas por:
-       - foram mantidas com sustain (dur reduced ~ dur expert)
-       - foram mantidas como hit (dur reduced << dur expert)
-       - foram dropadas
+    """Q4: distribution of durations (in ticks) of Expert notes, separated by:
+       - were kept with sustain (dur reduced ~ dur expert)
+       - were kept as hit (dur reduced << dur expert)
+       - were dropped
     """
     tpb = charts["Expert"].ticks_per_beat
     expert_by_tick = {n.tick: n for n in charts["Expert"].notes}
@@ -200,21 +200,21 @@ def run():
 
 if __name__ == "__main__":
     res = run()
-    # Resumo direto no terminal
+    # Summary directly to terminal
     for song, r in res.items():
         print(f"\n========== {song} ==========")
-        print("[Q1 subconjunto temporal]")
+        print("[Q1 temporal subset]")
         for d, v in r["q1_subset"].items():
-            print(f"  {d}: total={v['total']}, em_expert={v['in_expert']}, órfãs={v['only_in_diff']}")
-        print("[Q2 densidade por offset 16th do beat — (kept, total, ratio)]")
+            print(f"  {d}: total={v['total']}, in_expert={v['in_expert']}, orphans={v['only_in_diff']}")
+        print("[Q2 density by 16th offset of beat — (kept, total, ratio)]")
         for d, v in r["q2_density_by_beat"].items():
             print(f"  {d}: {v}")
-        print("[Q3 redução de acorde — size_change (E_size, R_size)]")
+        print("[Q3 chord reduction — size_change (E_size, R_size)]")
         for d, v in r["q3_chord_reduction"].items():
             print(f"  {d}: size_change={v['size_change']}")
             print(f"          kept_position={v['kept_position']}")
             print(f"          intersection={v['intersection_pattern']}")
-        print("[Q4 sustain por duração — bucket: total/dropped/kept_hit/kept_sustain]")
+        print("[Q4 sustain by duration — bucket: total/dropped/kept_hit/kept_sustain]")
         for d, v in r["q4_sustain"].items():
             print(f"  {d}:")
             for b, vals in v.items():
