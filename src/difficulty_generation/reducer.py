@@ -1,4 +1,4 @@
-“””
+"""
 Guitar: reduce Expert to Easy / Medium / Hard (PART GUITAR).
 
 Keeps the Expert's notes (Easy can **discard** events; see below). Only the
@@ -8,14 +8,14 @@ R11/R16 in sustains, R17 in bursts.
 **Medium** (`_medium_rapid_chord_simplify`): in very rapid alternation, three (or
 more) becomes two; pairs of *different* shapes (not the same repeated) become
 singles. When going 2→1, if the **Expert** in the same section has orange (O), keeps
-the note “on the right” (highest fret); otherwise keeps the “on the left”.
+the note "on the right" (highest fret); otherwise keeps the "on the left".
 
 **Easy** (`_easy_enforce_min_gap_eighth_of_bar`): minimum **1/8 of measure** between
 consecutive onsets (4/4 → `tpb/2` ticks); with `time_sigs` from map, the eighth of
 measure follows `num`/`denom` (1/8 of bar duration).
 
 See `reduce_note` and `DIFF_CONF` per level.
-“””
+"""
 from __future__ import annotations
 import os, sys
 import bisect

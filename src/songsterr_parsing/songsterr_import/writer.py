@@ -235,7 +235,7 @@ def _build_tom_intervals_for_marker(
     part_drums_track: mido.MidiTrack, marker_pitch: int
 ) -> list[tuple[int, int]]:
     """
-    Intervalos [start, end) em que o marker 110/111/112 indica “tom” na lane
+    Intervalos [start, end) em que o marker 110/111/112 indica "tom" na lane
     (paridade com CymbalAlternationService.BuildTomIntervals + IsTickInsideTomInterval).
     """
     abs_tick = 0
