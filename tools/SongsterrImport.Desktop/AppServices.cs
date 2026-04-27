@@ -6,8 +6,8 @@ namespace SongsterrImport.Desktop;
 
 internal static class AppServices
 {
-    private const string IncludeSoftNotesKey = "include_soft_notes";
     private const string ExpertCymbalAlternationWholeKey = "expert_cymbal_alternation_whole_chart";
+    private const string ThinAllCymbalLinesKey = "thin_all_cymbal_lines";
 
     internal static string LastSelectedTrackPathFilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -132,16 +132,6 @@ internal static class AppServices
         WriteUserOptions(options);
     }
 
-    internal static bool ReadIncludeSoftNotesEnabled(bool defaultValue = true)
-    {
-        return ReadBooleanOption(IncludeSoftNotesKey, defaultValue);
-    }
-
-    internal static void WriteIncludeSoftNotesEnabled(bool enabled)
-    {
-        WriteBooleanOption(IncludeSoftNotesKey, enabled);
-    }
-
     internal static bool ReadExpertCymbalAlternationWholeEnabled(bool defaultValue = false)
     {
         return ReadBooleanOption(ExpertCymbalAlternationWholeKey, defaultValue);
@@ -150,5 +140,15 @@ internal static class AppServices
     internal static void WriteExpertCymbalAlternationWholeEnabled(bool enabled)
     {
         WriteBooleanOption(ExpertCymbalAlternationWholeKey, enabled);
+    }
+
+    internal static bool ReadThinAllCymbalLinesEnabled(bool defaultValue = false)
+    {
+        return ReadBooleanOption(ThinAllCymbalLinesKey, defaultValue);
+    }
+
+    internal static void WriteThinAllCymbalLinesEnabled(bool enabled)
+    {
+        WriteBooleanOption(ThinAllCymbalLinesKey, enabled);
     }
 }

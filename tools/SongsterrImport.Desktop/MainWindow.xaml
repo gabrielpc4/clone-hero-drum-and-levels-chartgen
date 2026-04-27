@@ -85,6 +85,24 @@
                                     </TextBlock>
                                 </GridViewColumn.Header>
                             </GridViewColumn>
+                            <GridViewColumn Width="116" DisplayMemberBinding="{Binding NotesMidModifiedDisplay}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderNotesMidModified" Text="Drum Chart" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Date Generate Drum Chart was last run for this song (yyyy-MM-dd HH:mm). Empty until Generate Drum Chart is run."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn Width="116" DisplayMemberBinding="{Binding DifficultiesGeneratedDisplay}">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderDifficultiesGenerated" Text="Difficulties" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Date difficulties (Easy/Medium/Hard) were last generated for this song (yyyy-MM-dd HH:mm). Empty until Generate Difficulties is run."/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                            </GridViewColumn>
                             <GridViewColumn Width="128" DisplayMemberBinding="{Binding SongIniArtist}">
                                 <GridViewColumn.Header>
                                     <TextBlock x:Name="SongsHeaderArtist" Text="Artist" TextTrimming="CharacterEllipsis">
@@ -436,33 +454,7 @@
                         <TextBlock TextWrapping="Wrap" MaxWidth="450" Text="Walks every subfolder under the repository Songs/ directory. For each track that has notes.mid and is not a Harmonix (official) chart, regenerates E/M/H and creates a timestamped backup. Skips folders named … (Harmonix) and songs with charter=Harmonix in song.ini."/>
                     </Button.ToolTip>
                 </Button>
-                <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Top">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <CheckBox x:Name="IncludeSoftNotesCheck" Content="Include soft notes" IsChecked="True" VerticalAlignment="Center" />
-                        <Border
-                            Width="18"
-                            Height="18"
-                            CornerRadius="9"
-                            BorderBrush="#FFB0B0B0"
-                            BorderThickness="1"
-                            Background="#FFF5F5F5"
-                            Margin="6,0,0,0"
-                            VerticalAlignment="Center"
-                            Cursor="Help"
-                            ToolTipService.ShowDuration="60000"
-                            ToolTipService.InitialShowDelay="200">
-                            <Border.ToolTip>
-                                <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="When checked, every snare (including very quiet or ghost snares) is considered. When unchecked, low-velocity snare hits that look like ‘ghosts’ are dropped using the project default cut-off."/>
-                            </Border.ToolTip>
-                            <TextBlock
-                                Text="?"
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="#FF5A5A5A"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center" />
-                        </Border>
-                    </StackPanel>
+                <StackPanel Orientation="Vertical" Margin="0,10,0,0" VerticalAlignment="Top">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <CheckBox x:Name="ExpertCymbalAlternationWholeCheck" Content="Cymbal thinning" IsChecked="False" VerticalAlignment="Center" />
                         <Border
@@ -478,7 +470,44 @@
                             ToolTipService.ShowDuration="60000"
                             ToolTipService.InitialShowDelay="200">
                             <Border.ToolTip>
-                                <TextBlock TextWrapping="Wrap" MaxWidth="480" Text="When on, after building PART DRUMS the import thins Y/B expert cymbals (98/99) only in steady 1/8 runs that also have at least one red snare (97) in that time span. Long runs of only cymbals, or only cymbals with kick and no snare, are not thinned. Fills/irregular spacing break a run. Green (100) is never removed. Tom markers 110/111/112. The separate Cymbal Alternation window is not this rule."/>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="480" Text="Enable cymbal thinning for Expert drums. Choose whether to thin only runs with snare activity, or thin all cymbal lines."/>
+                            </Border.ToolTip>
+                            <TextBlock
+                                Text="?"
+                                FontSize="11"
+                                FontWeight="Bold"
+                                Foreground="#FF5A5A5A"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                        </Border>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,8,0,0">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ElementName=ExpertCymbalAlternationWholeCheck, Path=IsChecked}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="├ " VerticalAlignment="Center" Margin="0,0,4,0" Foreground="#FFB0B0B0"/>
+                        <CheckBox x:Name="ThinAllCymbalLinesCheck" Content="Thin all cymbal lines (not just snare runs)" IsChecked="False" VerticalAlignment="Center" />
+                        <Border
+                            Width="18"
+                            Height="18"
+                            CornerRadius="9"
+                            BorderBrush="#FFB0B0B0"
+                            BorderThickness="1"
+                            Background="#FFF5F5F5"
+                            Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            Cursor="Help"
+                            ToolTipService.ShowDuration="60000"
+                            ToolTipService.InitialShowDelay="200">
+                            <Border.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="480" Text="When checked, thin Y/B cymbals in all steady 1/8 runs. When unchecked, only thin cymbal runs that include snare activity. Green (100) is never removed."/>
                             </Border.ToolTip>
                             <TextBlock
                                 Text="?"

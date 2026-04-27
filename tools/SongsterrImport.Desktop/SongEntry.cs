@@ -1,5 +1,6 @@
 // Author: Gabriel Pinheiro de Carvalho
 using System.Collections.Generic;
+using System.IO;
 
 namespace SongsterrImport.Desktop;
 
@@ -15,6 +16,12 @@ public sealed class SongEntry
 
     /// <summary>Whether a folder with the same name exists under <c>Songs/</c> (sync already published).</summary>
     public required string InSongsStatus { get; init; }
+
+    /// <summary>Last-write timestamp of <c>Songs/&lt;name&gt;/notes.mid</c>, formatted as <c>yyyy-MM-dd HH:mm</c>, or empty when not present.</summary>
+    public string NotesMidModifiedDisplay { get; init; } = string.Empty;
+
+    /// <summary>Timestamp written by the difficulty generator to <c>Songs/&lt;name&gt;/.difficulties_ts</c>, or empty when not yet generated.</summary>
+    public string DifficultiesGeneratedDisplay { get; init; } = string.Empty;
 
     // song.ini [song] (Clone Hero) — same names as in the file where applicable
     public string SongIniArtist { get; init; } = string.Empty;
@@ -89,9 +96,27 @@ public sealed class SongEntry
         string customFolderFullPath,
         string displayName,
         string pathFromRepositoryRoot,
-        string inSongsStatus)
+        string inSongsStatus,
+        string? songsFolderPath = null)
     {
         IReadOnlyDictionary<string, string> ini = SongIniReader.ReadSongKeys(customFolderFullPath);
+
+        string notesMidModified = string.Empty;
+        string difficultiesGenerated = string.Empty;
+        if (songsFolderPath != null && Directory.Exists(songsFolderPath))
+        {
+            string drumChartSidecar = Path.Combine(songsFolderPath, ".drum_chart_ts");
+            if (File.Exists(drumChartSidecar))
+            {
+                notesMidModified = (File.ReadAllText(drumChartSidecar, System.Text.Encoding.UTF8) ?? string.Empty).Trim();
+            }
+
+            string difficultiesSidecar = Path.Combine(songsFolderPath, ".difficulties_ts");
+            if (File.Exists(difficultiesSidecar))
+            {
+                difficultiesGenerated = (File.ReadAllText(difficultiesSidecar, System.Text.Encoding.UTF8) ?? string.Empty).Trim();
+            }
+        }
         string g(string k) => SongIniReader.Get(ini, k);
         string load = g("loading_phrase");
         return new SongEntry
@@ -100,6 +125,8 @@ public sealed class SongEntry
             FullPath = customFolderFullPath,
             PathFromRepositoryRoot = pathFromRepositoryRoot,
             InSongsStatus = inSongsStatus,
+            NotesMidModifiedDisplay = notesMidModified,
+            DifficultiesGeneratedDisplay = difficultiesGenerated,
             SongIniArtist = g("artist"),
             SongIniTitle = g("name"),
             SongIniAlbum = g("album"),
