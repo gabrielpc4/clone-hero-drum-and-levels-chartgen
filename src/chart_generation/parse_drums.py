@@ -44,13 +44,37 @@ from __future__ import annotations
 import mido
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 
 DIFF_BASE_DRUMS = {"Easy": 60, "Medium": 72, "Hard": 84, "Expert": 96}
 LANE_NAMES = ["Kick", "Snare", "Yellow", "Blue", "Green"]
 LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN = 0, 1, 2, 3, 4
 
 TOM_FLAG_PITCHES = {LANE_YELLOW: 110, LANE_BLUE: 111, LANE_GREEN: 112}
+
+
+def remove_blue_cymbal_when_green_cymbal_co_occurs(notes: List[Any]) -> List[Any]:
+    """
+    If blue cymbal and green cymbal appear on the same tick, drop the blue cymbal.
+    Kick/snare/yellow and any tom hits are unchanged.
+    """
+    if not notes:
+        return notes
+    by_tick: Dict[int, List[int]] = defaultdict(list)
+    for i, n in enumerate(notes):
+        by_tick[n.tick].append(i)
+    drop: set[int] = set()
+    for idxs in by_tick.values():
+        has_green_cymbal = any(
+            notes[j].lane == LANE_GREEN and notes[j].is_cymbal for j in idxs
+        )
+        if not has_green_cymbal:
+            continue
+        for j in idxs:
+            m = notes[j]
+            if m.lane == LANE_BLUE and m.is_cymbal:
+                drop.add(j)
+    return [n for i, n in enumerate(notes) if i not in drop]
 
 
 @dataclass
@@ -171,6 +195,7 @@ def parse_drums(mid: mido.MidiFile) -> Dict[str, DrumChart]:
             elif p == 95 and diff == "Expert":
                 c.notes.append(DrumNote(tick=s, lane=LANE_KICK, is_2x_kick=True, velocity=v))
         c.notes.sort(key=lambda n: (n.tick, n.lane))
+        c.notes = remove_blue_cymbal_when_green_cymbal_co_occurs(c.notes)
         charts[diff] = c
     return charts
 

@@ -7,7 +7,13 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import mido
 
-from parse_drums import LANE_BLUE, LANE_GREEN, LANE_SNARE, LANE_YELLOW
+from parse_drums import (
+    LANE_BLUE,
+    LANE_GREEN,
+    LANE_SNARE,
+    LANE_YELLOW,
+    remove_blue_cymbal_when_green_cymbal_co_occurs,
+)
 
 # Expert Y/B/G (cymbals) e markers de tom; alternância 1/8 do import = writer (G imune), não 1:1 C#
 # Expert kick / snare / Y / B / G: 96, 97, 98, 99, 100 (parse_drums)
@@ -179,7 +185,7 @@ def collect_mapped_drum_events(
         seen_events.add(event_key)
         unique_events.append(event_value)
 
-    return unique_events
+    return remove_blue_cymbal_when_green_cymbal_co_occurs(unique_events)
 
 
 def build_part_drums_track(
