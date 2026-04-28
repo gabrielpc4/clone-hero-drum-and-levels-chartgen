@@ -7,6 +7,7 @@ import mido
 from parse_drums import LANE_BLUE, LANE_GREEN, LANE_YELLOW
 
 from .constants import (
+    FULL_GM_TOM_QUARTET_PITCHES,
     GM_TO_RB,
     LOW_TOM_PITCHES,
     TOM_PITCHES,
@@ -16,30 +17,91 @@ from .constants import (
 )
 
 
-def build_tom_pitch_map(
+def collect_used_tom_pitches(
     drum_track: mido.MidiTrack,
     minimum_snare_velocity: int | None = None,
-) -> Dict[int, int]:
-    """Mapeia toms GM usando o papel nominal de cada pitch."""
-    used_pitches = set()
-
+) -> set[int]:
+    """GM tom pitches (TOM_PITCHES) present on channel 10 with positive velocity."""
+    used: set[int] = set()
     for message in drum_track:
         if message.type != "note_on":
             continue
-
         if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
             continue
-
         if message.channel != 9:
             continue
-
         if message.note not in TOM_PITCHES:
             continue
+        used.add(message.note)
+    return used
 
-        used_pitches.add(message.note)
+
+def _track_has_channel9_pitch(
+    drum_track: mido.MidiTrack,
+    pitch_value: int,
+    minimum_snare_velocity: int | None,
+) -> bool:
+    for message in drum_track:
+        if message.type != "note_on":
+            continue
+        if message.note != pitch_value:
+            continue
+        if message.channel != 9:
+            continue
+        if not should_keep_source_hit(message.note, message.velocity, minimum_snare_velocity):
+            continue
+        return True
+    return False
+
+
+def _tom_pitch_map_full_gm_quartet(
+    drum_track: mido.MidiTrack,
+    used_pitches: set[int],
+    minimum_snare_velocity: int | None,
+) -> Dict[int, int]:
+    """
+    Remap when all four toms (43 very-low floor, 45 low, 47 mid, 48 high) appear:
+    43/47 → green tom, 45/48 → blue tom, 50 (and GM 63 when present) → yellow tom.
+    Other kit toms fall back to TOM_TO_LANE.
+    """
+    quartet_core: Dict[int, int] = {
+        43: LANE_GREEN,
+        45: LANE_BLUE,
+        47: LANE_GREEN,
+        48: LANE_BLUE,
+        50: LANE_YELLOW,
+    }
+    result: Dict[int, int] = {}
+    for pitch_value in sorted(used_pitches):
+        if pitch_value in quartet_core:
+            result[pitch_value] = quartet_core[pitch_value]
+        else:
+            result[pitch_value] = TOM_TO_LANE[pitch_value]
+    if _track_has_channel9_pitch(drum_track, 63, minimum_snare_velocity):
+        result[63] = LANE_YELLOW
+    return result
+
+
+def build_tom_pitch_map(
+    drum_track: mido.MidiTrack,
+    minimum_snare_velocity: int | None = None,
+    *,
+    used_tom_pitches: set[int] | None = None,
+) -> Dict[int, int]:
+    """Mapeia toms GM usando o papel nominal de cada pitch."""
+    used_pitches = (
+        used_tom_pitches
+        if used_tom_pitches is not None
+        else collect_used_tom_pitches(drum_track, minimum_snare_velocity)
+    )
 
     if not used_pitches:
         return {}
+
+    if FULL_GM_TOM_QUARTET_PITCHES <= used_pitches:
+        return _tom_pitch_map_full_gm_quartet(
+            drum_track, used_pitches, minimum_snare_velocity
+        )
 
     uses_upper_tom_register = any(pitch_value in used_pitches for pitch_value in (48, 50))
 

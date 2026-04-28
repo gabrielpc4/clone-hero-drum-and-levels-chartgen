@@ -80,4 +80,6 @@ TOM_TO_LANE: Dict[int, int] = {
 LOW_TOM_PITCHES = (41, 43, 45)
 UPPER_TOM_PITCHES = (47, 48, 50)
 TOM_PITCHES = tuple(TOM_TO_LANE.keys())
+# GM floor/mid/high toms — when all four appear in a song, apply quartet lane remap (mapping.py).
+FULL_GM_TOM_QUARTET_PITCHES = frozenset({43, 45, 47, 48})
 LANE_LETTERS = ["K", "S", "Y", "B", "G"]
