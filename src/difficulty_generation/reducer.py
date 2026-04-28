@@ -36,7 +36,12 @@ DIFF_CONF = {
 
 def classify_sustain_mode(expert: Chart) -> str:
     if not expert.notes: return "melodic"
-    return "aggressive" if median(n.duration for n in expert.notes) < 100 else "melodic"
+    # Exclude zero/trivial durations (dur <= 1) from the median — triplet ghost notes
+    # would otherwise drag the median below 100 even in melodically sustained songs.
+    meaningful = [n.duration for n in expert.notes if n.duration > 1]
+    if not meaningful:
+        return "aggressive"
+    return "aggressive" if median(meaningful) < 100 else "melodic"
 
 
 def classify_power_chord_mode(expert: Chart) -> bool:
@@ -268,7 +273,7 @@ def reduce_note(en: Note, diff: str, sub: int, isolated: bool,
     if len(en.frets) == 1:
         return Note(en.tick, en.end_tick,
                     (reduce_single_fret(en.frets[0], cfg["allowed_frets"], anchor_shift_int),),
-                    False, en.forced_hopo if diff == "Hard" else 0, False)
+                    False, en.forced_hopo if diff in ("Hard", "Medium") else 0, False)
     new = en.frets
     if len(new) > cfg["max_chord_size"]:
         if diff == "Medium":
@@ -762,6 +767,169 @@ def _medium_enforce_min_gap_eighth_of_bar(
     return merged_notes
 
 
+def _medium_thin_rapid_chord_runs(
+    notes: List[Note],
+    tpb: int,
+) -> List[Note]:
+    """
+    Medium: when chords alternate between at most 2 shapes at 8th-note speed or
+    faster for 4+ consecutive chords, thin the run to one chord per beat.
+
+    This prevents fast-strummed chord passages (e.g. RY/YB alternating at 16th
+    or 8th note speed) from carrying their full density into Medium, while leaving
+    isolated or slow chord changes untouched.
+    """
+    if not notes:
+        return notes
+
+    max_gap = max(1, tpb // 2)   # 8th note — "rapid" threshold
+    min_run = 4                   # minimum consecutive chords to qualify
+    beat = tpb                    # thin to one per quarter note
+
+    ordered = sorted(notes, key=lambda n: n.tick)
+    n_notes = len(ordered)
+    to_remove: set = set()
+
+    i = 0
+    while i < n_notes:
+        note = ordered[i]
+        if note.is_open or len(note.frets) < 2:
+            i += 1
+            continue
+
+        # Build a consecutive rapid chord run
+        run = [i]
+        shapes: set = {tuple(sorted(note.frets))}
+        j = i + 1
+        while j < n_notes:
+            curr = ordered[j]
+            if curr.is_open or len(curr.frets) < 2:
+                break
+            if curr.tick - ordered[j - 1].tick > max_gap:
+                break
+            shapes.add(tuple(sorted(curr.frets)))
+            if len(shapes) > 2:
+                break
+            run.append(j)
+            j += 1
+
+        if len(run) >= min_run and len(shapes) <= 2:
+            # Keep the first chord in each quarter-note slot, remove the rest
+            slots_used: set = set()
+            for idx in run:
+                slot = ordered[idx].tick // beat
+                if slot not in slots_used:
+                    slots_used.add(slot)
+                else:
+                    to_remove.add(idx)
+            i = j
+        else:
+            i += 1
+
+    return [n for idx, n in enumerate(ordered) if idx not in to_remove]
+
+
+def _medium_guitar_solo_feel(
+    notes: List[Note],
+    tpb: int,
+    time_sigs: List[Tuple[int, int, int]],
+    expert_sorted: List[Note],
+) -> List[Note]:
+    """
+    Medium guitar singles: keep the on-beat note every beat, plus alternating one
+    between-beat note.
+
+    Pattern (only toggled when between-beat notes actually exist):
+      beat A (allowed)  -> on-beat note + first between-beat note  -> flag=restricted
+      beat B (restricted) -> on-beat note only                     -> flag=allowed
+      beat C (allowed)  -> on-beat note + first between-beat note  -> flag=restricted
+      ...
+
+    If a beat has no between-beat notes the flag is NOT toggled, so the next beat
+    that does have extras will still get one.  Chords are filtered with the same
+    minimum-gap rule as before (>= tpb//4).
+    """
+    if not notes or tpb < 1:
+        return notes
+
+    ordered = sorted(notes, key=lambda n: n.tick)
+    expert_by_tick: Dict[int, Note] = {}
+    for n in expert_sorted:
+        if n.tick not in expert_by_tick:
+            expert_by_tick[n.tick] = n
+
+    chord_notes: List[Note] = []
+    single_notes: List[Note] = []
+    for n in ordered:
+        ex = expert_by_tick.get(n.tick)
+        is_chord = ex is not None and not ex.is_open and len(ex.frets) >= 2
+        if is_chord:
+            chord_notes.append(n)
+        else:
+            single_notes.append(n)
+
+    # Chord gap filter (unchanged from original logic)
+    kept_chords: List[Note] = []
+    for n in chord_notes:
+        need_gap = max(1, tpb // 4)
+        if not kept_chords or (n.tick - kept_chords[-1].tick) >= need_gap:
+            kept_chords.append(n)
+        else:
+            prev = kept_chords[-1]
+            if (n.end_tick - n.tick) > (prev.end_tick - prev.tick):
+                kept_chords[-1] = n
+
+    if not single_notes:
+        return sorted(kept_chords, key=lambda n: n.tick)
+
+    def eighth_ticks_at(t: int) -> int:
+        _, _, denom = _time_sig_start_num_denom_at_tick(time_sigs, t)
+        beat = max(1, (tpb * 4) // max(1, denom))
+        return max(1, beat // 2)
+
+    # Build 8th-note grid positions from 0 through the last note
+    eighth_starts: List[int] = []
+    t = 0
+    last_tick = single_notes[-1].tick
+    while t <= last_tick + eighth_ticks_at(last_tick):
+        eighth_starts.append(t)
+        t += eighth_ticks_at(t)
+
+    # A note is "on the 8th" if it falls within 1/4 of an 8th note of the grid position
+    kept_singles: List[Note] = []
+    can_include_extra = True
+
+    for bi, eighth_t in enumerate(eighth_starts):
+        next_eighth_t = eighth_starts[bi + 1] if bi + 1 < len(eighth_starts) else eighth_t + eighth_ticks_at(eighth_t)
+        tolerance = max(1, (next_eighth_t - eighth_t) // 4)
+
+        interval = [n for n in single_notes if eighth_t <= n.tick < next_eighth_t]
+        if not interval:
+            continue
+
+        on_eighth = [n for n in interval if abs(n.tick - eighth_t) <= tolerance]
+        between = [n for n in interval if abs(n.tick - eighth_t) > tolerance]
+
+        # If nothing lands close to the 8th, treat the first note as the representative
+        if not on_eighth:
+            on_eighth = [interval[0]]
+            between = interval[1:]
+
+        # Always keep the on-8th note
+        kept_singles.append(on_eighth[0])
+
+        if can_include_extra and between:
+            # Include the first between-8th note (16th) and restrict the next interval
+            kept_singles.append(between[0])
+            can_include_extra = False
+        elif not can_include_extra:
+            # This was the restricted interval; re-allow extras for the next one
+            can_include_extra = True
+        # If can_include_extra is True but no between notes: don't toggle the flag
+
+    return sorted(kept_chords + kept_singles, key=lambda n: n.tick)
+
+
 def _medium_preserve_constant_low_chord_progression(
     notes: List[Note],
     expert_sorted: List[Note],
@@ -1025,6 +1193,210 @@ def _medium_rapid_chord_simplify(
     return out
 
 
+def _medium_restore_expert_hopos(
+    notes: List[Note],
+    expert_sorted: List[Note],
+    tpb: int,
+) -> List[Note]:
+    """
+    After medium reduction some notes lose their HOPO status because intervening
+    notes were removed, increasing the gap to the previous medium note beyond
+    Clone Hero's auto-HOPO threshold (≈ tpb//3 at 120 BPM / 170 ms default).
+
+    For every medium single note whose Expert counterpart was an auto-HOPO or
+    forced-HOPO, but whose medium predecessor gap now exceeds the threshold,
+    this pass adds forced_hopo=+1 so Clone Hero keeps the HOPO.
+
+    Only single-fret notes are considered (chords are never HOPOs).
+    """
+    if not notes:
+        return notes
+
+    threshold = max(1, tpb // 3)
+
+    # Build expert lookup: tick -> Note
+    expert_by_tick: Dict[int, Note] = {}
+    for n in expert_sorted:
+        if n.tick not in expert_by_tick:
+            expert_by_tick[n.tick] = n
+
+    # For each expert single, find its previous note (any shape) with a different fret
+    expert_singles = [n for n in expert_sorted if not n.is_open and len(n.frets) == 1]
+    expert_prev_gap: Dict[int, int] = {}   # tick -> gap from previous note in Expert
+    for i, n in enumerate(expert_singles):
+        for j in range(i - 1, -1, -1):
+            prev = expert_singles[j]
+            if prev.frets != n.frets:
+                expert_prev_gap[n.tick] = n.tick - prev.tick
+                break
+
+    ordered = sorted(notes, key=lambda n: n.tick)
+
+    # Compute each medium single's gap from the previous medium note with a different fret
+    medium_prev_gap: Dict[int, int] = {}   # index in ordered -> gap
+    for i, n in enumerate(ordered):
+        if n.is_open or len(n.frets) != 1:
+            continue
+        for j in range(i - 1, -1, -1):
+            prev = ordered[j]
+            if not prev.is_open and prev.frets != n.frets:
+                medium_prev_gap[i] = n.tick - prev.tick
+                break
+
+    result = list(ordered)
+    for i, n in enumerate(ordered):
+        if n.is_open or len(n.frets) != 1:
+            continue
+        if n.forced_hopo != 0:
+            continue  # already has an explicit flag
+
+        ex = expert_by_tick.get(n.tick)
+        if ex is None or ex.is_open or len(ex.frets) != 1:
+            continue
+
+        # Was the Expert note a HOPO?
+        ex_forced = ex.forced_hopo == +1
+        ex_auto = expert_prev_gap.get(n.tick, 99999) <= threshold
+        if not ex_forced and not ex_auto:
+            continue  # not a HOPO in Expert — nothing to restore
+
+        # Is the Medium note still auto-HOPO?
+        med_gap = medium_prev_gap.get(i, 99999)
+        if med_gap <= threshold:
+            continue  # still within threshold — no action needed
+
+        # Gap grew beyond threshold: force HOPO
+        result[i] = Note(n.tick, n.end_tick, n.frets, n.is_open, +1, n.is_tap)
+
+    return result
+
+
+def _medium_short_chord_to_single(
+    notes: List[Note],
+    expert_sorted: List[Note],
+    tpb: int,
+) -> List[Note]:
+    """
+    Medium: any chord whose Expert duration is shorter than a 16th note (tpb//4)
+    is a decorative melodic tap, not a sustained power chord — reduce it to the
+    lower fret.  Long-duration power chords (dur >= tpb//4) are left unchanged.
+    """
+    threshold = max(1, tpb // 4)
+    expert_by_tick: Dict[int, Note] = {}
+    for n in expert_sorted:
+        if n.tick not in expert_by_tick:
+            expert_by_tick[n.tick] = n
+
+    result: List[Note] = []
+    prev_fret: Optional[int] = None
+    prev_expert_shape: Optional[tuple] = None
+    for n in notes:
+        if n.is_open or len(n.frets) < 2:
+            result.append(n)
+            if not n.is_open and n.frets:
+                prev_fret = n.frets[-1]
+            prev_expert_shape = None
+            continue
+        ex = expert_by_tick.get(n.tick)
+        if ex is not None and (ex.end_tick - ex.tick) < threshold:
+            expert_shape = tuple(sorted(ex.frets))
+            hi = max(n.frets)
+            lo = min(n.frets)
+            if expert_shape == prev_expert_shape:
+                # Same expert chord repeated — no real movement, hold the same fret
+                chosen = prev_fret if prev_fret is not None else hi
+            elif prev_fret is None or hi != prev_fret:
+                chosen = hi
+            elif lo != prev_fret:
+                chosen = lo
+            else:
+                chosen = hi
+            result.append(Note(n.tick, n.end_tick, (chosen,), False, n.forced_hopo, n.is_tap))
+            prev_fret = chosen
+            prev_expert_shape = expert_shape
+        else:
+            result.append(n)
+            prev_fret = max(n.frets)
+            prev_expert_shape = None
+    return result
+
+
+def _medium_sustained_landing_chord_to_single(
+    notes: List[Note],
+    tpb: int,
+) -> List[Note]:
+    """
+    Medium: a long sustained chord (dur >= 4 beats) that lands immediately after
+    a single note (gap <= 1 beat) is a melodic landing, not a rhythm power chord.
+    Reduce it to the lower fret kept as a single sustain.
+
+    Short rhythm chords (dur < 4 beats) are intentional chord sections — left alone.
+    """
+    if not notes:
+        return notes
+
+    ordered = sorted(notes, key=lambda n: n.tick)
+    min_sustain = tpb * 4
+    max_gap = tpb
+
+    result = list(ordered)
+    for i, n in enumerate(ordered):
+        if n.is_open or len(n.frets) < 2:
+            continue
+        if (n.end_tick - n.tick) < min_sustain:
+            continue
+        if i == 0:
+            continue
+        prev = ordered[i - 1]
+        if len(prev.frets) != 1:
+            continue
+        if (n.tick - prev.tick) > max_gap:
+            continue
+        result[i] = Note(n.tick, n.end_tick, (min(n.frets),), False, n.forced_hopo, n.is_tap)
+
+    return result
+
+
+def _medium_strip_overlapping_sustains(
+    notes: List[Note],
+    tpb: int,
+) -> List[Note]:
+    """
+    Medium: if a sustained note has other notes landing inside its hold window,
+    the player would need to fret new notes while holding — too hard for Medium.
+    Strip the sustain (set duration to zero) in those cases.
+    Only considers sustains longer than a quarter note to avoid touching short ties.
+    """
+    ordered = sorted(notes, key=lambda n: n.tick)
+    min_sustain = max(1, tpb)          # only care about holds >= 1 quarter note
+    grace = max(1, tpb // 4)          # ignore notes that start within this window of the hold start
+
+    note_ticks = [n.tick for n in ordered]
+
+    result: List[Note] = []
+    for n in ordered:
+        dur = n.end_tick - n.tick
+        if dur < min_sustain:
+            result.append(n)
+            continue
+
+        # Check whether any other note falls strictly inside the hold window
+        window_start = n.tick + grace
+        window_end = n.end_tick
+        lo = bisect.bisect_left(note_ticks, window_start)
+        hi = bisect.bisect_left(note_ticks, window_end)
+        has_overlap = any(
+            ordered[i].tick != n.tick
+            for i in range(lo, hi)
+        )
+
+        if has_overlap:
+            result.append(Note(n.tick, n.tick, n.frets, n.is_open, n.forced_hopo, n.is_tap))
+        else:
+            result.append(n)
+    return result
+
+
 def _find_expert_alternating_anchor_ticks(
     expert_sorted: List[Note],
     tpb: int,
@@ -1163,11 +1535,27 @@ def reduce_chart(expert: Chart, target_diff: str) -> Chart:
             out = _medium_remove_alternating_anchor_notes(out, anchor_ticks)
 
     if target_diff == "Medium" and out:
-        out = _medium_enforce_min_gap_eighth_of_bar(out, tpb, list(expert.time_sigs), notes)
+        out = _medium_thin_rapid_chord_runs(out, tpb)
+
+    if target_diff == "Medium" and out:
+        out = _medium_guitar_solo_feel(out, tpb, list(expert.time_sigs), notes)
         out = _medium_preserve_constant_low_chord_progression(out, notes, tpb)
 
     if target_diff == "Medium" and out:
         out = _medium_rapid_chord_simplify(out, tpb, notes)
+
+    if target_diff == "Medium" and out:
+        out = _medium_short_chord_to_single(out, notes, tpb)
+
+    if target_diff == "Medium" and out:
+        out = _medium_sustained_landing_chord_to_single(out, tpb)
+
+    if target_diff == "Medium" and out:
+        out = _medium_strip_overlapping_sustains(out, tpb)
+
+    # Must run last — gaps are only final after all note-removal passes above
+    if target_diff == "Medium" and out:
+        out = _medium_restore_expert_hopos(out, notes, tpb)
 
     return Chart(
         instrument=expert.instrument, difficulty=target_diff,
