@@ -53,6 +53,14 @@ LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN = 0, 1, 2, 3, 4
 TOM_FLAG_PITCHES = {LANE_YELLOW: 110, LANE_BLUE: 111, LANE_GREEN: 112}
 
 
+def _note_tick_any(n: Any) -> int:
+    """DrumNote.tick or MappedDrumEvent.source_tick."""
+    t = getattr(n, "tick", None)
+    if t is not None:
+        return int(t)
+    return int(getattr(n, "source_tick"))
+
+
 def remove_blue_cymbal_when_green_cymbal_co_occurs(notes: List[Any]) -> List[Any]:
     """
     If blue cymbal and green cymbal appear on the same tick, drop the blue cymbal.
@@ -62,7 +70,7 @@ def remove_blue_cymbal_when_green_cymbal_co_occurs(notes: List[Any]) -> List[Any
         return notes
     by_tick: Dict[int, List[int]] = defaultdict(list)
     for i, n in enumerate(notes):
-        by_tick[n.tick].append(i)
+        by_tick[_note_tick_any(n)].append(i)
     drop: set[int] = set()
     for idxs in by_tick.values():
         has_green_cymbal = any(
