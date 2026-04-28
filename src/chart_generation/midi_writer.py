@@ -15,7 +15,16 @@ sys.path.insert(0, os.path.dirname(__file__))
 from midi_repair import load_midi_file
 from parse_chart import parse_part, FRET_NAMES, DIFF_BASE
 from reducer import reduce_chart
-from parse_drums import parse_drums, DIFF_BASE_DRUMS, LANE_KICK, LANE_SNARE, LANE_YELLOW, LANE_BLUE, LANE_GREEN
+from parse_drums import (
+    parse_drums,
+    DIFF_BASE_DRUMS,
+    DrumChart,
+    LANE_KICK,
+    LANE_SNARE,
+    LANE_YELLOW,
+    LANE_BLUE,
+    LANE_GREEN,
+)
 from reducer_drums import reduce_drums
 
 
@@ -110,13 +119,19 @@ def _make_guitar_track_from_charts(orig_track, charts_by_diff, replace_diffs=("E
     return new_track
 
 
-def _make_drums_track_from_charts(orig_track, drum_charts_by_diff, replace_diffs=("Easy","Medium","Hard")):
+def _make_drums_track_from_charts(
+    orig_track,
+    drum_charts_by_diff,
+    replace_diffs=("Easy", "Medium", "Hard"),
+    expert_chart: DrumChart | None = None,
+):
     """Rebuilds PART DRUMS:
        - Strips pitches of difficulties to be replaced (60-64 / 72-76 / 84-88)
        - Keeps Expert (96-100), 2x kick (95), Pro markers (110/111/112),
          animations (24-51), P1/P2 (105/106) and text events
        - Removes SP (116) and drum fills/activation notes (120-124) by design.
        - Adds generated notes with correct pitches per difficulty.
+       - When expert_chart is set, Expert pads/2x come from parsed chart (same rules as parse_drums).
     """
     pitches_to_strip = set()
     for diff in replace_diffs:
@@ -127,14 +142,32 @@ def _make_drums_track_from_charts(orig_track, drum_charts_by_diff, replace_diffs
     # Star power / overdrive and drum fill activation markers — removed by design
     _DRUMS_STRIP_GLOBAL = {116, 120, 121, 122, 123, 124}
 
+    expert_strip = {95, 96, 97, 98, 99, 100}
+    use_parsed_expert = expert_chart is not None and len(expert_chart.notes) > 0
+
     surviving = []
     for abs_t, msg in _decode_track_abs(orig_track):
         if msg.type in ("note_on", "note_off"):
-            if msg.note in pitches_to_strip: continue
-            if msg.note in _DRUMS_STRIP_GLOBAL: continue
+            if msg.note in pitches_to_strip:
+                continue
+            if msg.note in _DRUMS_STRIP_GLOBAL:
+                continue
+            if use_parsed_expert and msg.note in expert_strip:
+                continue
         surviving.append((abs_t, msg))
 
     new_events = []
+    if use_parsed_expert:
+        base_ex = DIFF_BASE_DRUMS["Expert"]
+        for n in expert_chart.notes:
+            if n.is_2x_kick:
+                pitch = 95
+            else:
+                pitch = base_ex + n.lane
+            new_events.append((n.tick, mido.Message("note_on", note=pitch, velocity=n.velocity, time=0)))
+            new_events.append(
+                (n.tick + 1, mido.Message("note_off", note=pitch, velocity=0, time=0))
+            )
     for diff in replace_diffs:
         base = DIFF_BASE_DRUMS[diff]
         c = drum_charts_by_diff[diff]
@@ -165,6 +198,7 @@ def write_reduced_midi(input_mid_path: str, output_mid_path: str,
     # Pre-compute all replacements
     guitar_charts = None
     drums_charts = None
+    drums_parsed = None
     if "PART GUITAR" in parts:
         gc = parse_part(mid, "PART GUITAR")
         # Only generate difficulties that are not already authored in the source.
@@ -178,10 +212,14 @@ def write_reduced_midi(input_mid_path: str, output_mid_path: str,
             for d in replace_diffs
         }
     if "PART DRUMS" in parts:
-        dc = parse_drums(mid)
-        if dc.get("Expert"):
-            drums_charts = {d: reduce_drums(dc["Expert"], d) for d in replace_diffs}
-            info["notes_per_part_diff"]["PART DRUMS"] = {d: len(drums_charts[d].notes) for d in replace_diffs}
+        drums_parsed = parse_drums(mid)
+        if drums_parsed.get("Expert"):
+            drums_charts = {
+                d: reduce_drums(drums_parsed["Expert"], d) for d in replace_diffs
+            }
+            info["notes_per_part_diff"]["PART DRUMS"] = {
+                d: len(drums_charts[d].notes) for d in replace_diffs
+            }
 
     out_mid = mido.MidiFile(type=mid.type, ticks_per_beat=mid.ticks_per_beat)
     for tr in mid.tracks:
@@ -189,7 +227,21 @@ def write_reduced_midi(input_mid_path: str, output_mid_path: str,
             # Only strip/replace the difficulties that were actually generated
             out_mid.tracks.append(_make_guitar_track_from_charts(tr, guitar_charts, list(guitar_charts.keys())))
         elif tr.name == "PART DRUMS" and drums_charts:
-            out_mid.tracks.append(_make_drums_track_from_charts(tr, drums_charts, replace_diffs))
+            expert_emit = (
+                drums_parsed["Expert"]
+                if drums_parsed
+                and drums_parsed.get("Expert")
+                and len(drums_parsed["Expert"].notes) > 0
+                else None
+            )
+            out_mid.tracks.append(
+                _make_drums_track_from_charts(
+                    tr,
+                    drums_charts,
+                    replace_diffs,
+                    expert_chart=expert_emit,
+                )
+            )
         else:
             out_mid.tracks.append(tr)
     out_mid.save(output_mid_path)
