@@ -23,6 +23,15 @@ public sealed class SongEntry
     /// <summary>Timestamp written by the difficulty generator to <c>Songs/&lt;name&gt;/.difficulties_ts</c>, or empty when not yet generated.</summary>
     public string DifficultiesGeneratedDisplay { get; init; } = string.Empty;
 
+    /// <summary>Count of guitar single sections in <c>notes.chart</c> (Easy/Medium/Hard/Expert), from <c>original/custom/chart_authored_levels.json</c>. -1 = no chart file.</summary>
+    public int ChartAuthoredLevelsSortKey { get; init; } = -1;
+
+    /// <summary>Display of <see cref="ChartAuthoredLevelsSortKey"/> (e.g. <c>4</c> or empty).</summary>
+    public string ChartAuthoredLevelsDisplay { get; init; } = string.Empty;
+
+    /// <summary>Tooltip: which sections were found (e.g. <c>Easy, Medium, Hard, Expert</c>).</summary>
+    public string ChartAuthoredLevelsDetail { get; init; } = string.Empty;
+
     // song.ini [song] (Clone Hero) — same names as in the file where applicable
     public string SongIniArtist { get; init; } = string.Empty;
     public string SongIniTitle { get; init; } = string.Empty;
@@ -88,7 +97,9 @@ public sealed class SongEntry
             + " " + SongIniMore
             + " " + (SongIniEndEventsOn ? "end_events" : string.Empty)
             + " " + (SongIniFiveLaneDrumsOn ? "five_lane_drums" : string.Empty)
-            + " " + (SongIniProDrumsOn ? "pro_drums" : string.Empty);
+            + " " + (SongIniProDrumsOn ? "pro_drums" : string.Empty)
+            + " " + ChartAuthoredLevelsDisplay
+            + " " + ChartAuthoredLevelsDetail;
     }
 
     /// <summary>Builds a row from a custom track folder, reading <c>song.ini</c> if present. Column order in the UI matches the list below (identity and charting first, then the rest, then remaining keys in <see cref="SongIniMore"/>).</summary>
@@ -117,6 +128,14 @@ public sealed class SongEntry
                 difficultiesGenerated = (File.ReadAllText(difficultiesSidecar, System.Text.Encoding.UTF8) ?? string.Empty).Trim();
             }
         }
+
+        // Central original/custom/chart_authored_levels.json updated when notes.chart is newer than cached mtime.
+        ChartAuthoredLevelsStore.ReadForSongRow(
+            customFolderFullPath,
+            out int chartAuthoredSortKey,
+            out string chartAuthoredDisplay,
+            out string chartAuthoredDetail);
+
         string g(string k) => SongIniReader.Get(ini, k);
         string load = g("loading_phrase");
         return new SongEntry
@@ -127,6 +146,9 @@ public sealed class SongEntry
             InSongsStatus = inSongsStatus,
             NotesMidModifiedDisplay = notesMidModified,
             DifficultiesGeneratedDisplay = difficultiesGenerated,
+            ChartAuthoredLevelsSortKey = chartAuthoredSortKey,
+            ChartAuthoredLevelsDisplay = chartAuthoredDisplay,
+            ChartAuthoredLevelsDetail = chartAuthoredDetail,
             SongIniArtist = g("artist"),
             SongIniTitle = g("name"),
             SongIniAlbum = g("album"),
