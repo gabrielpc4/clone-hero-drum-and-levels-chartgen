@@ -58,6 +58,12 @@ def _make_guitar_track_from_charts(orig_track, charts_by_diff, replace_diffs=("E
     for abs_t, msg in _decode_track_abs(orig_track):
         if msg.type in ("note_on", "note_off"):
             if msg.note in pitches_to_strip: continue
+        # Strip Phase Shift SysEx forced-type markers [0x50, 0x53, ...] — they
+        # reference note positions that we are replacing. Moonscraper crashes with
+        # "key not present in dictionary" if these survive but the referenced notes
+        # have changed. Our forced_hopo note approach covers the same information.
+        if msg.type == "sysex" and len(msg.data) >= 2 and msg.data[0] == 0x50 and msg.data[1] == 0x53:
+            continue
         surviving.append((abs_t, msg))
 
     # Eventos novos das dificuldades reduzidas
