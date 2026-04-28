@@ -15,12 +15,13 @@ EXPERT_CYMBAL_PITCHES = (98, 99, 100)
 EXPERT_SNARE_PITCH = 97
 TOM_MARKER_PITCH_BY_EXPERT = {98: 110, 99: 111, 100: 112}
 
-from .constants import should_keep_source_hit
+from .constants import FULL_GM_TOM_QUARTET_PITCHES, should_keep_source_hit
 from .mapping import (
     build_closed_hat_skips,
     build_open_hat_lane_overrides,
     build_tom_lane_overrides,
     build_tom_pitch_map,
+    collect_used_tom_pitches,
     resolve_lane,
 )
 from .source import select_source_drum_track, track_name
@@ -44,6 +45,10 @@ def collect_mapped_drum_events(
         minimum_snare_velocity=minimum_snare_velocity,
     )
     drum_track = drum_selection.track
+    used_tom_pitches = collect_used_tom_pitches(
+        drum_track,
+        minimum_snare_velocity=minimum_snare_velocity,
+    )
     closed_hat_skips = build_closed_hat_skips(
         drum_track,
         minimum_snare_velocity=minimum_snare_velocity,
@@ -55,10 +60,15 @@ def collect_mapped_drum_events(
     tom_lane_map = build_tom_pitch_map(
         drum_track,
         minimum_snare_velocity=minimum_snare_velocity,
+        used_tom_pitches=used_tom_pitches,
     )
-    tom_lane_overrides = build_tom_lane_overrides(
-        drum_track,
-        minimum_snare_velocity=minimum_snare_velocity,
+    tom_lane_overrides = (
+        {}
+        if FULL_GM_TOM_QUARTET_PITCHES <= used_tom_pitches
+        else build_tom_lane_overrides(
+            drum_track,
+            minimum_snare_velocity=minimum_snare_velocity,
+        )
     )
 
     display_name = drum_selection.track_name if drum_selection.track_name else "<sem nome>"
