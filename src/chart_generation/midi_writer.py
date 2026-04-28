@@ -20,7 +20,7 @@ from reducer_drums import reduce_drums
 
 
 def _abs_to_delta(events_abs):
-    """List of (abs_tick, MetaMessage|Message) → MidiTrack with delta times."""
+    """List of (abs_tick, MetaMessage|Message) -> MidiTrack with delta times."""
     events_abs.sort(key=lambda e: e[0])
     track = mido.MidiTrack()
     last = 0
@@ -44,20 +44,26 @@ def _make_guitar_track_from_charts(orig_track, charts_by_diff, replace_diffs=("E
     """Builds new PART GUITAR keeping:
         - all notes that are NOT from the pitches of difficulties in replace_diffs
         - but REPLACES the pitches of those difficulties with generated charts.
-       Expert (pitches 96-102) is preserved untouched. Markers 40-59, 103-116 same.
+       Expert lanes (96-102) are preserved untouched.
+       TAP markers (pitch 104) are preserved.
+       Star power (116) is removed. Phase Shift SysEx forced-type markers are removed.
     """
     pitches_to_strip = set()
     for diff in replace_diffs:
         base = DIFF_BASE[diff]
-        # Easy: 58 (open), 60-64 (G..O), 65/66 (force HOPO on/off)
-        for p in [base-2, base, base+1, base+2, base+3, base+4, base+5, base+6]:
+        # Strip E/M/H lane range plus legacy open pitches (green±1, green±2); then inject generated notes.
+        for p in [base - 2, base - 1, base, base + 1, base + 2, base + 3, base + 4, base + 5, base + 6]:
             pitches_to_strip.add(p)
 
-    # Eventos originais que sobrevivem
+    # Star power / overdrive marker — removed by design
+    _GUITAR_STRIP_GLOBAL = {116}
+
+    # Keep TAP markers (pitch 104) and notes that aren't being replaced
     surviving = []
     for abs_t, msg in _decode_track_abs(orig_track):
         if msg.type in ("note_on", "note_off"):
             if msg.note in pitches_to_strip: continue
+            if msg.note in _GUITAR_STRIP_GLOBAL: continue
         # Strip Phase Shift SysEx forced-type markers [0x50, 0x53, ...] — they
         # reference note positions that we are replacing. Moonscraper crashes with
         # "key not present in dictionary" if these survive but the referenced notes
@@ -73,7 +79,7 @@ def _make_guitar_track_from_charts(orig_track, charts_by_diff, replace_diffs=("E
         c = charts_by_diff[diff]
         for n in c.notes:
             if n.is_open or not n.frets:
-                pitch = base - 2
+                pitch = base
                 new_events.append((n.tick, mido.Message("note_on",  note=pitch, velocity=100, time=0)))
                 new_events.append((n.end_tick if n.end_tick > n.tick else n.tick + 1,
                                    mido.Message("note_off", note=pitch, velocity=0, time=0)))
@@ -107,8 +113,9 @@ def _make_guitar_track_from_charts(orig_track, charts_by_diff, replace_diffs=("E
 def _make_drums_track_from_charts(orig_track, drum_charts_by_diff, replace_diffs=("Easy","Medium","Hard")):
     """Rebuilds PART DRUMS:
        - Strips pitches of difficulties to be replaced (60-64 / 72-76 / 84-88)
-       - Keeps Expert (96-100), 2x kick (95), Pro markers (110/111/112), SP (116),
-         drum fills (120-124), animations (24-51), P1/P2 (105/106) and text events
+       - Keeps Expert (96-100), 2x kick (95), Pro markers (110/111/112),
+         animations (24-51), P1/P2 (105/106) and text events
+       - Removes SP (116) and drum fills/activation notes (120-124) by design.
        - Adds generated notes with correct pitches per difficulty.
     """
     pitches_to_strip = set()
@@ -117,10 +124,14 @@ def _make_drums_track_from_charts(orig_track, drum_charts_by_diff, replace_diffs
         for p in range(base, base + 5):  # kick + snare + 3 pads
             pitches_to_strip.add(p)
 
+    # Star power / overdrive and drum fill activation markers — removed by design
+    _DRUMS_STRIP_GLOBAL = {116, 120, 121, 122, 123, 124}
+
     surviving = []
     for abs_t, msg in _decode_track_abs(orig_track):
         if msg.type in ("note_on", "note_off"):
             if msg.note in pitches_to_strip: continue
+            if msg.note in _DRUMS_STRIP_GLOBAL: continue
         surviving.append((abs_t, msg))
 
     new_events = []
@@ -128,7 +139,7 @@ def _make_drums_track_from_charts(orig_track, drum_charts_by_diff, replace_diffs
         base = DIFF_BASE_DRUMS[diff]
         c = drum_charts_by_diff[diff]
         for n in c.notes:
-            pitch = base + n.lane  # lane 0..4 → kick..green
+            pitch = base + n.lane  # lane 0..4 -> kick..green
             new_events.append((n.tick, mido.Message("note_on",  note=pitch, velocity=n.velocity, time=0)))
             # Drum notes have minimal duration — uses 1 tick (instant gem)
             new_events.append((n.tick + 1, mido.Message("note_off", note=pitch, velocity=0, time=0)))
@@ -156,17 +167,27 @@ def write_reduced_midi(input_mid_path: str, output_mid_path: str,
     drums_charts = None
     if "PART GUITAR" in parts:
         gc = parse_part(mid, "PART GUITAR")
-        guitar_charts = {d: reduce_chart(gc["Expert"], d) for d in replace_diffs}
-        info["notes_per_part_diff"]["PART GUITAR"] = {d: len(guitar_charts[d].notes) for d in replace_diffs}
+        # Only generate difficulties that are not already authored in the source.
+        # A difficulty is considered present if it has at least one note in its
+        # pitch range (open or frets) in the existing PART GUITAR track.
+        # Pre-authored difficulties are preserved intact in _make_guitar_track_from_charts.
+        missing_diffs = [d for d in replace_diffs if not gc.get(d) or len(gc[d].notes) == 0]
+        guitar_charts = {d: reduce_chart(gc["Expert"], d) for d in missing_diffs}
+        info["notes_per_part_diff"]["PART GUITAR"] = {
+            d: (len(guitar_charts[d].notes) if d in guitar_charts else f"kept ({len(gc[d].notes)} original)")
+            for d in replace_diffs
+        }
     if "PART DRUMS" in parts:
         dc = parse_drums(mid)
-        drums_charts = {d: reduce_drums(dc["Expert"], d) for d in replace_diffs}
-        info["notes_per_part_diff"]["PART DRUMS"] = {d: len(drums_charts[d].notes) for d in replace_diffs}
+        if dc.get("Expert"):
+            drums_charts = {d: reduce_drums(dc["Expert"], d) for d in replace_diffs}
+            info["notes_per_part_diff"]["PART DRUMS"] = {d: len(drums_charts[d].notes) for d in replace_diffs}
 
     out_mid = mido.MidiFile(type=mid.type, ticks_per_beat=mid.ticks_per_beat)
     for tr in mid.tracks:
-        if tr.name == "PART GUITAR" and guitar_charts:
-            out_mid.tracks.append(_make_guitar_track_from_charts(tr, guitar_charts, replace_diffs))
+        if tr.name == "PART GUITAR" and guitar_charts is not None:
+            # Only strip/replace the difficulties that were actually generated
+            out_mid.tracks.append(_make_guitar_track_from_charts(tr, guitar_charts, list(guitar_charts.keys())))
         elif tr.name == "PART DRUMS" and drums_charts:
             out_mid.tracks.append(_make_drums_track_from_charts(tr, drums_charts, replace_diffs))
         else:

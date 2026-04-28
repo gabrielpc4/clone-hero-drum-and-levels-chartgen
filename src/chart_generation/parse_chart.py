@@ -2,11 +2,12 @@
 Harmonix RB-format MIDI parser for Clone Hero charts.
 
 Per-instrument tracks (PART GUITAR / PART BASS / PART DRUMS / PART VOCALS).
-Per-difficulty note ranges within a 5-fret part:
-    Easy   : open=58, G=60, R=61, Y=62, B=63, O=64, ForceHOPO_on=65, ForceHOPO_off=66
-    Medium : open=70, G=72, R=73, Y=74, B=75, O=76, ForceHOPO_on=77, ForceHOPO_off=78
-    Hard   : open=82, G=84, R=85, Y=86, B=87, O=88, ForceHOPO_on=89, ForceHOPO_off=90
-    Expert : open=94, G=96, R=97, Y=98, B=99, O=100,ForceHOPO_on=101,ForceHOPO_off=102
+Per-difficulty guitar gems (PART GUITAR): ``N 7`` (open in .chart) is exported as **green**
+(same MIDI pitch as ``N 0``) for Clone Hero compatibility.
+    Easy   : G=60, R=61, Y=62, B=63, O=64, ForceHOPO_on=65, ForceHOPO_off=66
+    Medium : G=72, R=73, Y=74, B=75, O=76, ForceHOPO_on=77, ForceHOPO_off=78
+    Hard   : G=84, R=85, Y=86, B=87, O=88, ForceHOPO_on=89, ForceHOPO_off=90
+    Expert : G=96, R=97, Y=98, B=99, O=100,ForceHOPO_on=101,ForceHOPO_off=102
 Common markers: 103=SP(rb2)|Solo(rb1 alt), 104=Tap(CH), 105/106=P1/P2 (RB1) or Solo,
                 108=Lyric phrase, 116=Overdrive/StarPower, 120-124=BRE/Drum-fill,
                 40-59=hand-position animations (ignored for chart logic).
@@ -27,8 +28,8 @@ class Note:
     """One playable gem on the chart."""
     tick: int           # start tick (absolute)
     end_tick: int       # end tick (absolute) — for sustain length
-    frets: Tuple[int, ...]  # fret indices 0..4 played simultaneously; () == open strum
-    is_open: bool = False   # True if this is an open-strum (no fret)
+    frets: Tuple[int, ...]  # fret indices 0..4 played simultaneously
+    is_open: bool = False   # legacy: true only if sourced from MIDI that still marks open separately
     forced_hopo: int = 0    # +1 force-hopo-on, -1 force-hopo-off, 0 none
     is_tap: bool = False    # CH tap marker (pitch 104)
 
@@ -257,6 +258,16 @@ def _chart_note_rows(section_lines: List[str]) -> Dict[int, List[Tuple[int, int]
     return notes_by_tick
 
 
+def _chart_phrase_rows(section_lines: List[str]) -> List[Tuple[int, int, int]]:
+    """Parse `S phrase_type duration` entries (star power, solos, etc.)."""
+    results = []
+    for line in section_lines:
+        m = re.match(r"^(\d+)\s*=\s*S\s+(\d+)\s+(\d+)$", line)
+        if m:
+            results.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+    return results
+
+
 def _chart_events(event_lines: List[str]) -> List[Tuple[int, str]]:
     chart_events: List[Tuple[int, str]] = []
 
@@ -271,34 +282,61 @@ def _chart_events(event_lines: List[str]) -> List[Tuple[int, str]]:
     return chart_events
 
 
-def _chart_guitar_track(expert_single_lines: List[str]) -> mido.MidiTrack:
+_CHART_DIFF_PITCH: List[Tuple[str, int, int, int]] = [
+    # (section_name, green_base, force_on_pitch, force_off_pitch)
+    ("ExpertSingle", 96, 101, 102),
+    ("HardSingle",   84, 89,  90),
+    ("MediumSingle", 72, 77,  78),
+    ("EasySingle",   60, 65,  66),
+]
+
+
+def _chart_guitar_track(sections: Dict[str, List[str]]) -> mido.MidiTrack:
+    """Build PART GUITAR from all four difficulty sections, star power, and tap markers."""
     chart_track = mido.MidiTrack()
     chart_track.append(mido.MetaMessage("track_name", name="PART GUITAR", time=0))
     abs_messages: List[Tuple[int, object]] = []
-    note_pitch_map = {
-        0: 96,
-        1: 97,
-        2: 98,
-        3: 99,
-        4: 100,
-        5: 101,
-        6: 104,
-        7: 94,
-    }
 
-    for tick_value, note_rows in _chart_note_rows(expert_single_lines).items():
-        for note_value, duration_value in note_rows:
-            midi_pitch = note_pitch_map.get(note_value)
+    # Tap (pitch 104) and star power (pitch 116) are global markers — collect and
+    # deduplicate across all difficulty sections before emitting.
+    tap_ticks: set = set()
 
-            if midi_pitch is None:
-                continue
+    for section_name, base, force_on, force_off in _CHART_DIFF_PITCH:
+        lines = sections.get(section_name, [])
+        if not lines:
+            continue
 
-            note_length = max(1, duration_value)
-            abs_messages.append((tick_value, mido.Message("note_on", note=midi_pitch, velocity=100, time=0)))
-            abs_messages.append((tick_value + note_length, mido.Message("note_off", note=midi_pitch, velocity=0, time=0)))
+        note_pitch_map = {
+            0: base,        # G
+            1: base + 1,    # R
+            2: base + 2,    # Y
+            3: base + 3,    # B
+            4: base + 4,    # O
+            5: force_on,    # Force HOPO on
+            7: base,        # chart "open" (N 7) -> green in MIDI (same as N 0)
+            # Note 6 (tap) handled separately below to avoid duplicates
+        }
+
+        for tick_value, note_rows in _chart_note_rows(lines).items():
+            for note_value, duration_value in note_rows:
+                if note_value == 6:
+                    tap_ticks.add(tick_value)
+                    continue
+                midi_pitch = note_pitch_map.get(note_value)
+                if midi_pitch is None:
+                    continue
+                note_length = max(1, duration_value)
+                abs_messages.append((tick_value, mido.Message("note_on", note=midi_pitch, velocity=100, time=0)))
+                abs_messages.append((tick_value + note_length, mido.Message("note_off", note=midi_pitch, velocity=0, time=0)))
+
+        # Star power / overdrive (pitch 116) intentionally not emitted — removed by design
+
+    # Emit tap markers once per tick (pitch 104 is a global track marker)
+    for tick_value in sorted(tap_ticks):
+        abs_messages.append((tick_value, mido.Message("note_on", note=104, velocity=100, time=0)))
+        abs_messages.append((tick_value + 1, mido.Message("note_off", note=104, velocity=0, time=0)))
 
     _append_abs_messages(chart_track, abs_messages)
-
     return chart_track
 
 
@@ -396,8 +434,8 @@ def chart_file_to_midi(chart_path: str) -> mido.MidiFile:
     _append_abs_messages(conductor_track, abs_messages)
     midi_file.tracks.append(conductor_track)
 
-    if sections.get("ExpertSingle"):
-        midi_file.tracks.append(_chart_guitar_track(sections["ExpertSingle"]))
+    if any(sections.get(s) for s, *_ in _CHART_DIFF_PITCH):
+        midi_file.tracks.append(_chart_guitar_track(sections))
 
     if sections.get("ExpertDrums"):
         midi_file.tracks.append(_chart_drums_track(sections["ExpertDrums"], ticks_per_beat))
@@ -443,13 +481,12 @@ def parse_part(mid: mido.MidiFile, part_name: str) -> Dict[str, Chart]:
         gem_buckets: Dict[int, List[Tuple[int,int]]] = defaultdict(list)  # tick -> [(fret, end_tick)]
         force_on: List[int] = []
         force_off: List[int] = []
-        opens: List[Tuple[int,int]] = []
         for s, e, p in pairs:
             offset = p - base
-            if 0 <= offset <= 4:
+            if offset in (-2, -1):  # legacy "open" MIDI pitches -> green
+                gem_buckets[s].append((0, e))
+            elif 0 <= offset <= 4:
                 gem_buckets[s].append((offset, e))
-            elif offset == -2:  # open strum
-                opens.append((s, e))
             elif offset == 5:
                 force_on.append(s)
             elif offset == 6:
@@ -457,14 +494,11 @@ def parse_part(mid: mido.MidiFile, part_name: str) -> Dict[str, Chart]:
         # Convert buckets to Note list
         for tick in sorted(gem_buckets):
             gems = gem_buckets[tick]
-            frets = tuple(sorted(g[0] for g in gems))
+            frets = tuple(sorted({g[0] for g in gems}))
             end = max(g[1] for g in gems)
             n = Note(tick=tick, end_tick=end, frets=frets)
             if tick in force_on: n.forced_hopo = +1
             elif tick in force_off: n.forced_hopo = -1
-            c.notes.append(n)
-        for s, e in opens:
-            n = Note(tick=s, end_tick=e, frets=(), is_open=True)
             c.notes.append(n)
         c.notes.sort(key=lambda n: n.tick)
         charts[diff] = c

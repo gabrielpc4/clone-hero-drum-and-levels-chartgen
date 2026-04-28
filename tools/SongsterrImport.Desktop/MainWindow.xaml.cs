@@ -43,8 +43,9 @@ public partial class MainWindow : Window
     private const string H_Load = "Load Phrase";
     private const string H_More = "More";
     private const string H_Processed = "Processed";
-    private const string H_NotesMidModified = "Drum Chart";
-    private const string H_DifficultiesGenerated = "Difficulties";
+    private const string H_NotesMidModified = "Drums Generated At";
+    private const string H_DifficultiesGenerated = "Difficulties Generated at";
+    private const string H_ChartLevels = "Difficulties in Orig Chart";
     private const string H_End = "End";
     private const string H_5L = "5L";
     private const string H_Pro = "Pro";
@@ -424,6 +425,10 @@ public partial class MainWindow : Window
         {
             propertyName = nameof(SongEntry.InSongsStatus);
         }
+        else if (ReferenceEquals(col, SongsColumnChartLevels))
+        {
+            propertyName = nameof(SongEntry.ChartAuthoredLevelsSortKey);
+        }
         else
         {
             propertyName = (col.DisplayMemberBinding as System.Windows.Data.Binding)?.Path?.Path;
@@ -459,6 +464,7 @@ public partial class MainWindow : Window
         SongsHeaderProcessed.Text = H_Processed;
         SongsHeaderNotesMidModified.Text = H_NotesMidModified;
         SongsHeaderDifficultiesGenerated.Text = H_DifficultiesGenerated;
+        SongsHeaderChartLevels.Text = H_ChartLevels;
         SongsHeaderTitle.Text = H_Title;
         SongsHeaderArtist.Text = H_Artist;
         SongsHeaderAlbum.Text = H_Album;
@@ -508,6 +514,9 @@ public partial class MainWindow : Window
                 break;
             case nameof(SongEntry.DifficultiesGeneratedDisplay):
                 SongsHeaderDifficultiesGenerated.Text = H_DifficultiesGenerated + arrow;
+                break;
+            case nameof(SongEntry.ChartAuthoredLevelsSortKey):
+                SongsHeaderChartLevels.Text = H_ChartLevels + arrow;
                 break;
             case nameof(SongEntry.SongIniTitle):
                 SongsHeaderTitle.Text = H_Title + arrow;

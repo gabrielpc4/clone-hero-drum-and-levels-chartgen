@@ -85,23 +85,40 @@
                                     </TextBlock>
                                 </GridViewColumn.Header>
                             </GridViewColumn>
-                            <GridViewColumn Width="116" DisplayMemberBinding="{Binding NotesMidModifiedDisplay}">
+                            <GridViewColumn Width="118" DisplayMemberBinding="{Binding NotesMidModifiedDisplay}">
                                 <GridViewColumn.Header>
-                                    <TextBlock x:Name="SongsHeaderNotesMidModified" Text="Drum Chart" TextTrimming="CharacterEllipsis">
+                                    <TextBlock x:Name="SongsHeaderNotesMidModified" Text="Drums Generated At" TextTrimming="CharacterEllipsis">
                                         <TextBlock.ToolTip>
                                             <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Date Generate Drum Chart was last run for this song (yyyy-MM-dd HH:mm). Empty until Generate Drum Chart is run."/>
                                         </TextBlock.ToolTip>
                                     </TextBlock>
                                 </GridViewColumn.Header>
                             </GridViewColumn>
-                            <GridViewColumn Width="116" DisplayMemberBinding="{Binding DifficultiesGeneratedDisplay}">
+                            <GridViewColumn Width="118" DisplayMemberBinding="{Binding DifficultiesGeneratedDisplay}">
                                 <GridViewColumn.Header>
-                                    <TextBlock x:Name="SongsHeaderDifficultiesGenerated" Text="Difficulties" TextTrimming="CharacterEllipsis">
+                                    <TextBlock x:Name="SongsHeaderDifficultiesGenerated" Text="Difficulties Generated at" TextTrimming="CharacterEllipsis">
                                         <TextBlock.ToolTip>
                                             <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Date difficulties (Easy/Medium/Hard) were last generated for this song (yyyy-MM-dd HH:mm). Empty until Generate Difficulties is run."/>
                                         </TextBlock.ToolTip>
                                     </TextBlock>
                                 </GridViewColumn.Header>
+                            </GridViewColumn>
+                            <GridViewColumn x:Name="SongsColumnChartLevels" Width="44">
+                                <GridViewColumn.Header>
+                                    <TextBlock x:Name="SongsHeaderChartLevels" Text="Difficulties in Orig Chart" TextTrimming="CharacterEllipsis">
+                                        <TextBlock.ToolTip>
+                                            <TextBlock TextWrapping="Wrap" MaxWidth="400" Text="Number of guitar difficulty blocks in notes.chart (Easy/Medium/Hard/Expert Single). All songs share one cache file: original/custom/chart_authored_levels.json (refreshed when notes.chart changes). Run: python tools/scan_chart_authored_levels.py"/>
+                                        </TextBlock.ToolTip>
+                                    </TextBlock>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock
+                                            Text="{Binding ChartAuthoredLevelsDisplay}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTip="{Binding ChartAuthoredLevelsDetail}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
                             </GridViewColumn>
                             <GridViewColumn Width="128" DisplayMemberBinding="{Binding SongIniArtist}">
                                 <GridViewColumn.Header>
