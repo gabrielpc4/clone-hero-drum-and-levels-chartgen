@@ -124,7 +124,9 @@ def load_midi_file(path: str) -> mido.MidiFile:
         seen.add(candidate)
         try:
             return mido.MidiFile(file=io.BytesIO(candidate), clip=True)
-        except (OSError, ValueError) as ex:
+        except (OSError, ValueError, EOFError) as ex:
+            # EOFError: truncated chunk / wrong n_tracks so mido reads past EOF;
+            # later candidates may fix header or merge orphan bytes.
             if first_error is None:
                 first_error = ex
             continue
