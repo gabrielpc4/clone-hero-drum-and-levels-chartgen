@@ -1,598 +1,115 @@
-# Songsterr Drum Import
+# Clone Hero Drum Chart Generator
 
-> Este arquivo é a fonte canônica de handoff para o import de bateria do Songsterr.
-> projeto está descrito aqui e deve prevalecer sobre qualquer documento antigo.
+A toolkit for creating and maintaining Clone Hero drum charts from existing MIDI and chart files.
 
-## 1. Objetivo
+The project focuses on turning drum performances from external sources into playable `PART DRUMS` tracks while preserving the timing, structure, and other instrument tracks of an existing Clone Hero chart. It also includes tools for vocal tracks, difficulty generation, chart analysis, and synchronizing generated charts into a Clone Hero song library.
 
-Gerar uma `PART DRUMS` Expert para Clone Hero a partir de um MIDI do Songsterr,
-alinhando a bateria ao tempo real da chart de referência.
+## Features
 
-Cenário real de produção:
+- Import drum performances from Songsterr MIDI files.
+- Map General MIDI drum notes to Clone Hero lanes, cymbals, and toms.
+- Align imported notes to the timing of a reference `notes.mid` or `notes.chart`.
+- Handle changing time signatures and measure-based timing markers.
+- Optionally filter low-velocity snare hits.
+- Optionally apply Expert cymbal alternation rules.
+- Generate lead vocal tracks from compatible MIDI sources.
+- Generate missing difficulty levels from existing charts.
+- Analyze chart timing, alignment, and difficulty data.
+- Copy generated charts into the repository's `Songs` library layout.
+- Provide a Windows desktop workflow for Songsterr import and chart maintenance.
 
-- a pasta da música (ver seção 2) já tem `notes.chart` ou `notes.mid` sincronizado ao audio
-- normalmente existe `PART GUITAR`, mas não `PART DRUMS`
-- o Songsterr fornece o MIDI fonte com a bateria em GM no canal 9
-- o resultado final deve ser salvo como `notes.generated.mid`
+## Project layout
 
-A verdade temporal final é sempre a chart de referência. O MIDI do Songsterr
-só fornece a estrutura musical e os anchors de compasso.
+```text
+src/
+  chart_generation/       Chart parsing, synchronization, and MIDI writing
+  difficulty_generation/  Difficulty reduction and analysis
+  songsterr_parsing/      Songsterr import and source processing
 
-## 2. Estrutura atual
+tools/                     Workflow scripts and analysis utilities
+Songs/                     Charts prepared for the Clone Hero library
+original/                  Source charts and working material
+custom/                    Community chart material
+Custom/                    Additional chart assets and utilities
+requirements.txt           Python dependencies
+copy_song_to_clone_hero.ps1
+                          Windows chart synchronization script
+```
 
-### 2.1 Onde ficam `notes.mid` e `notes.chart` no repositório
+## Requirements
 
-- **Packs Harmonix (oficiais)**: pastas na **raiz do repo** com o padrão
-  `System of a Down - <titulo> (Harmonix)/`. Cada música é uma pasta; dentro
-  ficam `notes.mid` e, se existir, `notes.chart`, mais `notes.generated.mid` /
-  `notes.generated.mid` (e por vezes `notes.generated-<dd-mm-hh-mm>.mid` como
-  backup), `song.ini`, `album.jpg`, audio, etc. O `copy_song_to_clone_hero.ps1` (ver seção 15)
-  toma `notes.generated.mid` e publica em `Songs/…/notes.mid`.
+- Python 3
+- `mido`
+- `requests`
+- Windows PowerShell for the synchronization scripts
+- .NET 8 SDK for the optional desktop application
 
-- **Jogo (Clone Hero)**: `Songs/<nome da pasta>/` — destino alvo do sync. Cada
-  música é uma subpasta com `notes.mid` (a chart servida no jogo: cópia de
-  `notes.generated.mid` na origem), `song.ini`, audio, etc. O sync não traz
-  `*.mid` / `*.chart` extra da origem, só o `notes.mid` acima.
-
-- **Charts da comunidade (custom)**: `custom/<nome-da-pasta>/`, com a mesma
-  ideia de arquivos por música (`notes.chart` e/ou `notes.mid` conforme o caso).
-
-- **Não** usamos mais o layout antigo `songs/harmonix/…` na raiz deste repo;
-  alguns blocos `if __name__ == "__main__"` em `src/` ainda podem apontar para
-  esse caminho só para debug local — ajuste o `base` se for correr isso aí.
-
-### 2.2 Organização do `src`
-
-O `src` está organizado por responsabilidade:
-
-- `src/songsterr_parsing`
-  - importer principal do Songsterr
-  - pipeline e helpers específicos do Songsterr
-- `src/chart_generation`
-  - parsing de chart e MIDI
-  - escrita do `notes.mid` final
-  - `chart_sync/` com análises de alinhamento e sync
-- `src/difficulty_generation`
-  - geração de dificuldades faltantes
-  - `difficulty_analysis/` com validações e análises auxiliares
-
-## 3. Arquivos canônicos
-
-Pipeline principal:
-
-- `src/chart_generation/parse_chart.py`
-- `src/chart_generation/parse_drums.py`
-- `src/chart_generation/parse_vocals.py`
-- `src/songsterr_parsing/import_songsterr.py`
-- `src/songsterr_parsing/import_vocals.py`
-- `src/songsterr_parsing/songsterr_import/context.py`
-- `src/songsterr_parsing/songsterr_import/pipeline.py`
-- `src/songsterr_parsing/songsterr_import/vocal_pipeline.py`
-- `src/songsterr_parsing/songsterr_import/measure_marker_sync.py`
-- `src/songsterr_parsing/songsterr_import/source.py`
-- `src/songsterr_parsing/songsterr_import/vocal_source.py`
-- `src/songsterr_parsing/songsterr_import/mapping.py`
-- `src/songsterr_parsing/songsterr_import/writer.py`
-- `src/songsterr_parsing/songsterr_import/constants.py`
-
-Scripts e ferramentas (sync e entrega):
-- `copy_song_to_clone_hero.ps1` (Windows) — copia `notes.generated.mid` para `Songs/.../notes.mid` e copia o resto da origem
-- `src/songsterr_parsing/download_songsterr_midi.py` — baixar MIDI a partir de URL (requer arquivo de cookies de sessão; export via API de usuário autenticado, tipicamente Songsterr Plus)
-- `tools/generate_vocals_midi.py` — atualiza `Songs/.../notes.mid` em-place com `PART VOCALS`, cria backup antes e preserva todo o resto da chart
-- `tools/songsterr_workflow.ps1` — encadear *download* + *import* + *sync* no console (não invoca a aplicação WPF)
-- `tools/SongsterrImport.sln` — UI WPF (`SongsterrImport.Desktop`): escolhe pasta em `Songs/`, login Songsterr no WebView2, grava cookies, lança os mesmos `py` e `copy_song_to_clone_hero.ps1` com log; também tem ações por música para `Generate Difficulties` e `Generate Vocals`
-  - Na **raiz do repo**: `Iniciar-Songsterr-Import.bat` (duplo clique: compila e abre; precisa de .NET 8 SDK) e `Criar-Atalho-No-Desktop.bat` (atalho para o `exe` em `bin\Debug\net8.0-windows10.0.19041.0\`)
-
-`requirements.txt` na raiz: `mido`, `requests`. Variável de ambiente de trabalho: `PYTHONPATH=src;src/chart_generation` (Windows usa `;` no caminho).
-
-Redução e geração de dificuldades:
-
-- `src/difficulty_generation/reducer.py`
-- `src/difficulty_generation/reducer_drums.py`
-- `src/chart_generation/midi_writer.py`
-- `tools/difficulty_classification/classification_logic.py`
-
-Análises e debug:
-
-- `src/chart_generation/chart_sync/align.py`
-- `src/chart_generation/chart_sync/align_drums.py`
-- `src/difficulty_generation/difficulty_analysis/validate.py`
-- `src/difficulty_generation/difficulty_analysis/deep_dive.py`
-- `src/difficulty_generation/difficulty_analysis/finer.py`
-
-## 4. Comando de produção
-
-Uso básico:
+Install the Python dependencies with:
 
 ```bash
-python3 src/songsterr_parsing/import_songsterr.py "<songsterr.mid>" "<out.mid>"
+python -m pip install -r requirements.txt
 ```
 
-Flags ativas hoje:
+When running Python modules from the repository root, configure the source path as needed:
+
+```powershell
+$env:PYTHONPATH = "src;src/chart_generation"
+```
+
+## Importing a drum chart
+
+The importer uses the external MIDI for the performance and a reference chart for final timing:
 
 ```bash
-python3 src/songsterr_parsing/import_songsterr.py "<songsterr.mid>" "<out.mid>" \
-  --ref-path "<notes.chart|notes.mid>" \
-  --initial-offset-ticks 768 \
-  --filter-weak-snares
+python src/songsterr_parsing/import_songsterr.py \
+  "path/to/source.mid" \
+  "path/to/notes.generated.mid" \
+  --ref-path "path/to/notes.mid"
 ```
 
-Semântica atual das flags:
+Useful options include:
 
-- `--ref-path`: override explicito da chart de referência
-- `--initial-offset-ticks`: offset global aplicado depois do mapeamento por compassos
-- `--filter-weak-snares` (opcional): remove caixas com velocity abaixo do padrao
-  (ghosts). Sem esta flag, todas as caixas (incluindo soft) entram
-- `--expert-cymbal-alternation-whole` (opcional): após montar `PART DRUMS`, aplica
-  a mesma alternância de pratos Expert (Y/B/G) que a ferramenta *Cymbal
-  Alternation*, na **música inteira** (candidatos 98/99/100 fora de trechos
-  de tom; ver secção 9)
-
-Auto-detecção de referência:
-
-- `notes.chart`
-- `notes.mid`
-
-O importer procura esses arquivos no diretorio do `src_mid`, do `out_mid` e do
-`--ref-path` quando existe (tipicamente a **mesma pasta** da música ém
-`System of a Down - … (Harmonix)/` ou em `custom/…/`). Se não achar referência
-válida, falha com erro.
-
-### 4.1 Baixar o MIDI do Songsterr (URL)
-
-O export no site exige **sessão** (conta; exportação MIDI costuma exigir **Plus**). O script `download_songsterr_midi.py` usa `POST https://www.songsterr.com/api/edits/download` com o corpo JSON (revision, song, parts, lyrics, midi) e os **cookies** gravados pela app (WebView2) em `%LocalAppData%\SongsterrImport\songsterr_cookies.json` (array JSON de cookies por domínio). Sem cookies válidos, o passo de download falha com 401/403 e mensagem explícita.
-
-Exemplo (raiz do repo, PowerShell, `PYTHONPATH=src;src\chart_generation`):
-
-```powershell
-py -3 src/songsterr_parsing/download_songsterr_midi.py "https://www.songsterr.com/a/wsa/...-s21961" "Songs/...\songsterr_in.mid" --cookie-file "$env:LOCALAPPDATA\SongsterrImport\songsterr_cookies.json"
+```text
+--initial-offset-ticks N
+--filter-weak-snares
+--expert-cymbal-alternation-whole
 ```
 
-A sequencia de terminal documentada (sem abrir a GUI) esta em `tools/songsterr_workflow.ps1`.
+If `--ref-path` is omitted, the importer looks for a suitable `notes.chart` or `notes.mid` near the source and output files. The generated MIDI is based on the reference chart, so existing timing and non-drum tracks remain intact.
 
-### 4.2 Gerar `PART VOCALS`
+## Generating vocals
 
-Uso básico para gerar um `notes.generated.mid` ou qualquer outro output a partir
-de um MIDI auxiliar com track vocal nomeada:
+To create a new MIDI containing a lead vocal track:
 
 ```bash
-python3 src/songsterr_parsing/import_vocals.py "<externo.mid>" "<out.mid>" \
-  --ref-path "<notes.chart|notes.mid>"
+python src/songsterr_parsing/import_vocals.py \
+  "path/to/vocal-source.mid" \
+  "path/to/notes.generated.mid" \
+  --ref-path "path/to/notes.mid"
 ```
 
-Escopo atual:
+The source must contain a recognizable vocal or lyrics track with notes in the expected vocal range. The current pipeline generates pitch and phrase markers, but does not generate lyrics or harmony parts.
 
-- gera apenas **lead vocals**
-- gera só **pitch + phrase markers**
-- **não** gera lyrics
-- **não** gera `HARM1` / `HARM2`
-- usa o mesmo sync por `MEASURE_n` do pipeline de bateria
+## Syncing a chart to Clone Hero
 
-Regras importantes:
-
-- a track source precisa ter nome com `vocal` ou `lyrics`
-- a track source precisa ter notas no range vocal esperado (`36..84`)
-- se não houver track vocal válida, o processo falha com erro explícito
-- o merge substitui só `PART VOCALS`; o resto da chart é preservado
-
-Para atualizar diretamente a cópia já publicada em `Songs/.../notes.mid`:
+After generating `notes.generated.mid`, publish it into the `Songs` directory with:
 
 ```powershell
-py -3 tools/generate_vocals_midi.py "C:\...\Songs\System of a Down - Pictures (Wagsii)\notes.mid" "C:\...\original\custom\System of a Down - Pictures (Wagsii)\System of a Down-Pictures-12-21-2025.mid" --custom-song-dir "C:\...\original\custom\System of a Down - Pictures (Wagsii)"
+.\copy_song_to_clone_hero.ps1 `
+  "C:\path\to\source-song-folder" `
+  "System of a Down - Example"
 ```
 
-Comportamento do script acima:
+The script writes the generated MIDI as `Songs/<song>/notes.mid` and copies supporting song files while excluding extra MIDI and chart files.
 
-- cria backup timestamped de `notes.mid`
-- reescreve só `PART VOCALS`
-- preserva guitarra, bateria, conductor, events e outras tracks
-- tenta atualizar `diff_vocals` no `song.ini` da source e no `song.ini` de `Songs/`
-- se não conseguir classificar `diff_vocals`, avisa no log e não mexe nesse campo
+## Songsterr authentication
 
-## 5. Modelo de sync em produção
+The optional Songsterr downloader requires an authenticated session. The desktop application can store the session cookies locally and pass them to the downloader. Do not commit cookie files, tokens, or exported session data to this repository.
 
-O pipeline ativo usa apenas `MEASURE_n`.
+## FFmpeg
 
-### 4.1 Fonte dos anchors
+FFmpeg executables are not bundled with the repository. If a local workflow requires FFmpeg, install it separately and configure the relevant tool to use the local executable path.
 
-- `_source_measure_marker_ticks()` lê os markers `MEASURE_n` da track de bateria
-  escolhida no Songsterr
-- `measure_start_ticks()` calcula os inícios de compasso da referência a partir
-  dos `time_signature` reais do conductor
+## License
 
-Isso suporta naturalmente músicas com mudança de formula de compasso:
-
-- `4/4`
-- `7/8`
-- `9/8`
-- `5/4`
-- `3/4`
-- `6/8`
-
-Se o Songsterr não tiver markers `MEASURE_n` suficientes na track de bateria, o
-pipeline deve falhar. Não existe fallback silencioso.
-
-### 4.2 Warp por compasso
-
-`_build_adaptive_measure_anchors()` compara a duração real, em segundos, de:
-
-- 1 compasso do source
-- 1 compasso da referência
-- 2 compassos consecutivos da referência
-
-Se 2 compassos da referência casarem melhor com 1 compasso do source por uma
-margem real de pelo menos `0.05s`, o importer usa um pareamento `1x -> 2x`.
-Nesse caso ele cria um anchor sintetico no meio do compasso do source para
-interpolar a metade correspondente.
-
-Esse comportamento existe para casos como o interludio de `Sugar`.
-
-### 4.3 Offset inicial
-
-`DEFAULT_INITIAL_OFFSET_TICKS = 768`.
-
-O offset inicial não e mais somado cegamente a todos os ticks da referência.
-Ele e interpretado como:
-
-- quantos compassos inteiros da chart devem ser pulados
-- mais um residuo fino em ticks
-
-Charts que tem um compasso extra no comeco pois é assim que é o formato esperado no Clone Hero, por isso que usamos 768, que é exatamente um compasso.
-
-Casos reais que validaram essa regra:
-
-- `Soil`: alternância `4/4` e `7/8`
-- `Question!`: alternância `9/8`, `5/4`, `3/4` e `4/4`
-
-Nos logs do importer isso aparece como:
-
-- `offset manual=+768 ticks (pula 1 compassos da chart)`
-
-### 4.4 Interpretacao correta do tempo
-
-Não confie em BPM nominal puro.
-
-A mesma música pode ser escrita com:
-
-- formulas de compasso diferentes
-- BPMs aparentes diferentes
-- mesma duração musical real
-
-O que importa e:
-
-- os anchors musicais do source
-- o mapa temporal final da chart de referência
-
-## 6. Selecao da track de bateria
-
-`select_source_drum_track()` não escolhe a primeira track do canal 9.
-
-Ela ranqueia candidatos por:
-
-- quantidade de hits mapeaveis
-- hint de nome (`drum`, `kit`, `perc`, `percussion`)
-- quantidade total de hits no canal 9
-- ordem da track
-
-Se existir um candidato de bateria real, tracks auxiliares de `perc` /
-`percussion` sao descartadas do ranking final.
-
-Isso e importante para MIDIs com:
-
-- duas tracks de bateria
-- uma track principal e outra de acompanhamento/percussao
-
-## 7. Mapeamento atual de notas GM -> CH
-
-### 6.1 Notas mapeadas diretamente
-
-- `35`, `36` -> kick
-- `37`, `38`, `40` -> snare
-- `42` -> yellow cymbal
-- `46` -> yellow cymbal por padrão
-- `49` -> green cymbal
-- `51` -> blue cymbal
-- `52` -> green cymbal
-- `53` -> blue cymbal
-- `55` -> blue cymbal
-- `56`, `67`, `68` -> blue cymbal
-- `57` -> green cymbal
-
-Chokes / variantes:
-
-- `17` High Crash (Choke) -> green cymbal
-- `18` Medium Crash (Choke) -> green cymbal
-- `19` China (Choke) -> green cymbal
-- `20` Ride Cymbal (Choke) -> blue cymbal
-- `21` Splash (Choke) -> blue cymbal
-
-### 6.2 Notas ignoradas globalmente
-
-- `39` Hand Clap -> ignorado
-- `44` Foot Hi Hat -> ignorado
-- qualquer pitch sem mapeamento -> ignorado
-
-### 6.3 Toms nominais
-
-Base atual:
-
-- `41`, `43`, `45` -> green tom
-- `47` -> blue tom
-- `48`, `50` -> yellow tom
-
-### 6.4 Heuristicas de tom
-
-`build_tom_pitch_map()` e `build_tom_lane_overrides()` fazem dois ajustes
-importantes:
-
-1. **Lowered kit adaptativo**
-
-Se a música não usa toms altos (`48` ou `50`), o kit baixo é reescalado assim:
-
-- maior pitch presente do grupo baixo -> yellow
-- segundo maior -> blue
-- restantes -> green
-
-2. **Viradas de low tom**
-
-Se uma corrida contem apenas low toms e não vem de uma sequencia com upper tom
-antes, o maior low tom da corrida vira blue e o menor vira green. Isso deixa
-fills `floor -> very low` mais legiveis no CH.
-
-## 8. Regras atuais de hihat / prato
-
-### 7.1 Open hihat
-
-`46` e yellow por padrão.
-
-Ele só vira blue quando:
-
-- esta entre dois `42`
-- os gaps anterior e posterior sao equilibrados
-- e não faz parte de uma alternância mais longa de open hats
-
-Isso modela o caso "open isolado entre closed hats".
-
-### 7.2 Closed hihat que deve sumir
-
-O closed `42` e descartado quando:
-
-- aparece entre dois `46`
-- os gaps anterior e posterior sao equilibrados
-
-Na pratica, uma sequencia como:
-
-- `46, 42, 46`
-
-vira:
-
-- `Y, (drop), Y`
-
-Numa alternância maior como:
-
-- `46, 42, 46, 42`
-
-o open continua yellow e o closed do meio some. Isso evita transformar esse
-padrão em uma parede azul.
-
-## 9. Pratos Expert (Y/B/G), filtros de snare e alternância opcional
-
-### 9.1 Filtro de velocity de caixa (ghost / soft)
-
-`--filter-weak-snares` e opcional.
-
-Comportamento atual:
-
-- se **não** passar a flag, todo hit com `velocity > 0` entra (inclui notas
-  muito suaves)
-- com **`--filter-weak-snares`**, aplica-se o corte `DEFAULT_MINIMUM_SNARE_VELOCITY` (75)
-  apenas a snares
-- outras peças nunca usam esse corte
-
-### 9.2 Weak snare (com `--filter-weak-snares` ativo)
-
-- duas caixas do **mesmo pitch** dentro de `src_tpb // 8` podem marcar a
-  **primeira** para descarte (ghost)
-
-### 9.3 Alternância de pratos Expert em chart inteiro (`--expert-cymbal-alternation-whole`)
-
-A mesma regra que a ferramenta *Cymbal Alternation* (WPF) num único intervalo
-`[0, fim]`: notas 98, 99, 100 (Y/B/G Expert) que **não** caem num intervalo de
-tom indicado por markers 110, 111, 112, ordenadas por tick e nota, depois
-**remove-se metade** (paridade) como no código C#.
-
-### 9.4 Note-on com velocity zero
-
-`note_on` com `velocity == 0` sempre e ignorado. Isso evita confundir note-off
-codado como note-on com hit real.
-
-## 10. Escrita do `PART DRUMS`
-
-O writer faz o seguinte:
-
-- converte cada evento mapeado em pitch `96 + lane`
-- escreve `note_on` e `note_off` com duração de `1` tick
-- cria markers `110`, `111`, `112` para todos os Y/B/G que sao toms
-- os tom markers duram `target_tpb // 8`
-- usa o `ticks_per_beat` da referência
-- constrói o MIDI final a partir da referência, preservando as tracks dela
-- substitui um `PART DRUMS` existente ou adiciona um novo se não houver
-
-O track gerado sempre comeca com:
-
-- `track_name = PART DRUMS`
-- `text = [mix 0 drums0]`
-
-## 11. Pós-processos por música (histórico)
-
-Houve, no passado, scripts ad hoc (`postprocess_bubbles_songsterr`, `postprocess_soldier_side_songsterr`, `fix_soldier_side_songsterr_mid`, etc.) que **deixaram de fazer** parte do repositório. O `import_songsterr` atual não aplica pós-processamento por música. Casos de borderline (Bubbles, Soldier Side, A.D.D.) exigem revisão manual se necessário.
-
-## 12. Casos reais que definiram a baseline
-
-### Lonely Day
-
-Licao permanente:
-
-- a mesma música pode ser escrita com grids rítmicos diferentes entre Songsterr
-  e CH
-- por isso o pipeline precisa confiar em anchors musicais, não em BPM cru
-
-### Sugar
-
-Licao permanente:
-
-- nunca corte fisicamente o source MIDI para "arrumar o primeiro compasso"
-- isso desloca os `MEASURE_n` e quebra o sync
-- count-in no source: resolva na fonte (chart/referencia ou edicao fora do
-  `import_songsterr`); a flag de drop por beat foi removida do import
-
-Tambem foi o caso que justificou o pareamento adaptativo `1x -> 2x`.
-
-### Soil
-
-Validou:
-
-- alternância real de `4/4` e `7/8`
-- necessidade de interpretar `768` como "pular compassos + residuo"
-
-### Question!
-
-Validou:
-
-- alternância real de `9/8`, `5/4`, `3/4` e `4/4`
-- mesma leitura correta do offset de `768`
-- importação sem mapeamento de “flam”/dedup (hit a hit, exceto `weak` se ativo)
-- acoplamento entre weak snare e `--filter-weak-snares`
-- `Hand Clap` ignorado globalmente
-
-## 13. Status prático das musicas
-
-Músicas que hoje servem como referência de robustez do algoritmo:
-
-- `Sugar` -> stress test do pareamento `1x -> 2x`
-- `Soil` -> stress test de `4/4 <-> 7/8`
-- `Question!` -> stress test de `9/8`, `5/4`, `3/4`, `4/4`
-
-Status importante para não assumir errado:
-
-- `Bubbles` -> ainda e tratada com cuidado (nenhum pós-processamento automatico hoje)
-- `A.D.D.` -> explicitamente marcada pelo usuario como precisando revisitacao
-- `Sugar` -> o usuário já editou trechos manualmente em certas iteraçoes; evitar
-  sobrescrever sem pedir
-
-## 14. Ferramentas de debug
-
-O antigo `generate_measure_debug_songsterr.py` já não esta no repositório. Para depurar, use `src/chart_generation/chart_sync/align*.py`, `difficulty_analysis/`, e inspeção direta:
-
-### 14.1 Inspeção direta via Python
-
-Quando uma música éstranha aparecer:
-
-1. inspecione `time_signature` e `set_tempo` do source
-2. compare `MEASURE_n` do source com `measure_start_ticks(src_mid)`
-3. compare `measure_start_ticks(ref_mid)` com o log do importer
-
-Se os `MEASURE_n` baterem com os inícios de compasso reais do source, o source
-esta estruturalmente bom.
-
-## 15. Workflow operacional
-
-### 14.1 Sequencia de comandos
-
-Comandos dependentes devem rodar sequencialmente.
-
-Já houve leitura de arquivo stale quando geração e passos seguintes ocorreram em
-paralelo. Para esse repo:
-
-- gere
-- espere terminar
-- sincronize
-
-### 14.2 Regra de trabalho atual
-
-Depois de qualquer alteracao em codigo **ou documentacao**, o workflow esperado
-e:
-
-1. regenerar a música ativa
-2. rodar o sync (ver abaixo)
-
-A música mais recente usada como baseline de trabalho foi `Question!`.
-
-Exceção prática: a ação de vocals que escreve direto em `Songs/.../notes.mid`
-não exige sync depois, porque ela já atua no arquivo final publicado para o jogo.
-
-### 14.3 `copy_song_to_clone_hero.ps1`
-
-O script **exige dois argumentos**: pasta de **origem** (ex.:
-`original/custom/System of a Down - Soil (Wagsii)/` ou a pasta de trabalho na
-raiz) e o **destino sob** `Songs/` (pasta a criar ou reutilizar, ex.:
-`System of a Down - Soil`; também se pode passar `Songs/…` e o path é
-normalizado).
-
-No **Windows**:
-
-```powershell
-.\copy_song_to_clone_hero.ps1 "C:\...\pasta-origem-com-notes.generated.mid" "System of a Down - Soil"
-```
-
-Comportamento:
-
-- Exige `notes.generated.mid` na origem e grava `Songs/<pasta>/notes.mid` a
-  partir dele.
-- Copia o **restante** da origem para o destino, **excluindo** todos os
-  `*.mid` e `*.chart` (fica só o `notes.mid` escrito acima).
-- Cria a pasta de destino sob `Songs/` se ainda não existir.
-
-### 14.4 Ajuste de pastas: nome igual ao de `original/custom/`
-
-Se em `Songs/` a pasta tiver o nome “curto” (sem ` (autor)`) e em
-`original/custom/` existir a pasta com o sufixo do chart, use:
-
-```powershell
-.\tools\align_songs_folders_to_custom.ps1 -RepoRoot $PWD
-```
-
-Renomeia `Songs\Nome Curto` para `Songs\Nome Curto (Wagsii)` (exemplo) quando
-há correspondência unívoca. Se duas pastas de custom compartilharem o mesmo
-nome após retirar o sufixo, o script avisa e não mexe em nada.
-
-### 14.5 Workflow de vocals
-
-Hoje existem dois caminhos suportados:
-
-1. **CLI para gerar arquivo novo**:
-   - `src/songsterr_parsing/import_vocals.py`
-   - uso típico: gerar `notes.generated.mid` na pasta source
-   - depois, se esse for o artefato final desejado, roda o sync normal
-
-2. **UI / script para atualizar o arquivo final do jogo**:
-   - botão `Generate Vocals` na app WPF
-   - ou `tools/generate_vocals_midi.py`
-   - uso típico: já existe `Songs/<musica>/notes.mid` e queremos adicionar só vocals
-
-No caminho 2:
-
-- o target é sempre o `notes.mid` já existente em `Songs/`
-- o script cria backup antes de sobrescrever
-- só `PART VOCALS` é substituída/adicionada
-- o resto da chart fica intacto
-- `song.ini` recebe `diff_vocals` quando a classificação encontra score
-- não existe fallback silencioso para lyrics: se o source não tiver lyrics, v1 fica pitch-only mesmo
-
-## 16. Regras de continuidade para a próxima LLM
-
-1. Leia este arquivo primeiro.
-2. Preserve o pipeline atual como baseline.
-3. Antes de criar helper novo, procure em `src/` se já existe módulo para
-   isso.
-4. Se mexer em sync:
-   - teste pelo menos em `Sugar`, `Soil` e `Question!`
-5. Se mexer em mapeamento/pratos Expert/snare:
-   - teste pelo menos na música ativa
-   - regenere e sincronize no final
-6. Não silencie erros estruturais:
-   - sem referência
-   - sem `MEASURE_n`
-   - sem track de bateria válida
-   - sem track vocal válida
-7. Atualize este arquivo, não espalhe uma nova "fonte da verdade" em outro `.md`.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
