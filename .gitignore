@@ -62,3 +62,6 @@ src/__pycache__/
 
 # MIDI backups (extension without .mid — content still is MIDI)
 *.backup
+
+# FFmpeg binaries are local tooling dependencies and are not stored in Git
+tools/ffmpeg/bin/*.exe
